@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, videosApi } from '../api/client';
 import type { Video, VideoListQuery } from '../api/types';
+import AddVideoDialog from '../components/AddVideoDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorState from '../components/ErrorState';
 import Pagination from '../components/Pagination';
@@ -21,6 +22,7 @@ export default function Videos() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Video | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   // Debounce the free-text search so every keystroke does not hit the API.
   useEffect(() => {
@@ -97,9 +99,14 @@ export default function Videos() {
           <h2 className="font-display text-xl font-semibold tracking-tight text-fg">Video library</h2>
           <p className="mt-0.5 text-sm text-dim">{summary}</p>
         </div>
-        <button type="button" onClick={() => void load()} className={btnNeutral}>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => void load()} className={btnNeutral}>
+            Refresh
+          </button>
+          <button type="button" onClick={() => setAddOpen(true)} className={btnPrimary}>
+            Add video
+          </button>
+        </div>
       </div>
 
       <div className="card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -198,6 +205,19 @@ export default function Videos() {
           />
         ) : null}
       </div>
+
+      <AddVideoDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={(video, mode) => {
+          toast.success(
+            mode === 'upload'
+              ? `Uploaded “${video.title ?? video.id}” — extracting audio now.`
+              : `Queued “${video.title ?? video.id}” for download.`,
+          );
+          void load();
+        }}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}

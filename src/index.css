@@ -65,6 +65,18 @@
   }
 }
 
+@layer components {
+  /*
+   * The panel almost every screen is built from. Components (and `ui.ts`) have
+   * always referred to `card`, but nothing defined it — so every panel rendered
+   * with a transparent background and the default grey border. Defining it once
+   * here fixes all nineteen call sites.
+   */
+  .card {
+    @apply rounded-lg border border-line bg-card shadow-panel;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

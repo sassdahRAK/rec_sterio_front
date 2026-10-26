@@ -184,11 +184,84 @@ export const statsApi = {
 
 /* ----------------------------------------------------------------- videos */
 
+export interface CreateVideoRequest {
+  source_url: string;
+  title?: string | null;
+  notes?: string | null;
+  start_transcription?: boolean;
+}
+
+export interface UploadVideoRequest {
+  file: File;
+  title?: string | null;
+  notes?: string | null;
+  start_transcription?: boolean;
+}
+
 export const videosApi = {
   list: (query: VideoListQuery = {}): Promise<Paginated<Video>> =>
     request<Paginated<Video>>('/videos', { query: { ...query } }),
 
   get: (id: string): Promise<VideoDetail> => request<VideoDetail>(`/videos/${id}`),
+
+  /** Ingest from a link — the backend downloads it with yt-dlp. */
+  create: (body: CreateVideoRequest): Promise<Video> =>
+    request<Video>('/videos', { method: 'POST', body }),
+
+  /**
+   * Ingest a file the operator already has.
+   *
+   * This is the path that does not depend on a platform serving a download —
+   * TikTok and YouTube refuse most server-side requests. Multipart, so it
+   * cannot go through `request()`.
+   */
+  upload: async (input: UploadVideoRequest): Promise<Video> => {
+    if (isMockEnabled()) {
+      throw new ApiError('not_supported', 'File upload is not available in demo data.', 400);
+    }
+    const form = new FormData();
+    form.append('file', input.file, input.file.name);
+    form.append('start_transcription', String(input.start_transcription ?? true));
+    if (input.title) form.append('title', input.title);
+    if (input.notes) form.append('notes', input.notes);
+
+    const token = readToken();
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/videos/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+    } catch {
+      throw new ApiError(
+        'network_error',
+        'Could not reach the recsterio API. Check that the backend is running.',
+        0,
+      );
+    }
+
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+    }
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+      }
+      // A duplicate answers 409 with the existing video; surface that record
+      // so the operator lands on what they already have instead of an error.
+      const duplicate = (payload as { video?: Video } | null)?.video;
+      if (response.status === 409 && duplicate) return duplicate;
+      throw toApiError(response.status, payload);
+    }
+    return payload as Video;
+  },
 
   remove: (id: string): Promise<void> => request<void>(`/videos/${id}`, { method: 'DELETE' }),
 

@@ -12,12 +12,20 @@ interface MergeDiffProps {
   onApply: (merge: Merge) => void;
 }
 
-/** The contract does not pin the exact key names inside `merges.diff.segments`, so read tolerantly. */
+/**
+ * Raw per-engine text for a diff row.
+ *
+ * The backend's merger emits `base_text` (Whisper) and `candidate_text`
+ * (Gemini) for every aligned segment; `whisper_text`/`gemini_text` are accepted
+ * too so the view survives either naming. Read tolerantly: a missing key and a
+ * legitimately empty segment both mean "nothing to show".
+ */
 function textOf(segment: DiffSegment, engine: 'whisper' | 'gemini'): string {
+  const raw = segment as Record<string, unknown>;
   const candidates =
     engine === 'whisper'
-      ? [segment.whisper_text, (segment as Record<string, unknown>).whisper, (segment as Record<string, unknown>).base_text, (segment as Record<string, unknown>).base]
-      : [segment.gemini_text, (segment as Record<string, unknown>).gemini];
+      ? [segment.whisper_text, raw.whisper, raw.base_text, raw.base]
+      : [segment.gemini_text, raw.gemini, raw.candidate_text, raw.candidate];
   for (const candidate of candidates) {
     if (typeof candidate === 'string') return candidate;
   }
