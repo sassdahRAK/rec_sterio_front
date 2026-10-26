@@ -4,7 +4,11 @@
  * without the real backend. Shapes mirror docs/API_CONTRACT.md exactly.
  */
 import type {
+  DataCard as MockDataCard,
   DiffSegment,
+  Folder,
+  FolderMember,
+  FolderRole,
   Job,
   LoginResponse,
   Merge,
@@ -141,6 +145,8 @@ export const mockVideos: Video[] = videoSeed.map((v) => ({
   platform: v.platform ?? 'unknown',
   title: v.title ?? null,
   notes: v.notes ?? null,
+  folder_id: v.folder_id ?? null,
+  position: v.position ?? 0,
   status: v.status ?? 'pending',
   progress: v.progress ?? 0,
   error: v.error ?? null,
@@ -273,6 +279,7 @@ export const mockTranscripts: Transcript[] = transcriptSeed.map((t) => ({
   content: t.content ?? '',
   segments: t.segments ?? null,
   status: t.status ?? 'ready',
+  cleaned: t.cleaned ?? t.videoSeed === 1,
   error: t.error ?? null,
   created_by: t.created_by ?? 'whisper',
   created_at: t.created_at ?? iso(0),
@@ -605,6 +612,184 @@ const paginate = <T,>(items: T[], page: number, pageSize: number): Paginated<T> 
 const matches = (haystack: string | null | undefined, needle: string): boolean =>
   !needle || (haystack ?? '').toLowerCase().includes(needle.toLowerCase());
 
+
+/* ------------------------------------------------------------- dataset mock */
+
+let mockFolders: Folder[] = [
+  {
+    id: uid(2001),
+    name: 'Phnom Penh voices',
+    description: 'Public street interviews with Khmer–English code switching.',
+    visibility: 'public',
+    owner_id: uid(1),
+    owner_email: 'demo@recsterio.local',
+    parent_id: null,
+    position: 0,
+    created_at: iso(9_000_000),
+    updated_at: iso(200_000),
+    video_count: 0,
+    my_role: 'editor',
+    children: [],
+  },
+  {
+    id: uid(2002),
+    name: 'Unit A — markets',
+    description: 'Subset recorded around Orussey and Kandal markets.',
+    visibility: 'public',
+    owner_id: uid(1),
+    owner_email: 'demo@recsterio.local',
+    parent_id: uid(2001),
+    position: 0,
+    created_at: iso(8_000_000),
+    updated_at: iso(300_000),
+    video_count: 0,
+    my_role: 'editor',
+    children: [],
+  },
+  {
+    id: uid(2003),
+    name: 'Reviewer set',
+    description: 'Private review copies before publication.',
+    visibility: 'private',
+    owner_id: uid(1),
+    owner_email: 'demo@recsterio.local',
+    parent_id: null,
+    position: 1,
+    created_at: iso(7_000_000),
+    updated_at: iso(400_000),
+    video_count: 0,
+    my_role: 'editor',
+    children: [],
+  },
+];
+
+// File the seeded videos into the demo folders so the cards have a home.
+mockVideos.forEach((video, index) => {
+  if (index < 3) video.folder_id = uid(2001);
+  else if (index < 5) video.folder_id = uid(2003);
+  else video.folder_id = null;
+  video.position = index;
+});
+
+interface MockFolderMember extends FolderMember {
+  folder_id: string;
+}
+
+let mockFolderMembers: MockFolderMember[] = [
+  {
+    folder_id: uid(2001),
+    user_id: uid(3001),
+    email: 'reviewer@example.com',
+    name: 'Sokha',
+    role: 'commenter',
+    created_at: iso(6_000_000),
+  },
+];
+
+interface MockShare {
+  id: string;
+  folder_id: string;
+  token: string;
+  role: FolderRole | string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+  url: string;
+}
+
+interface MockPasscode {
+  id: string;
+  folder_id: string;
+  label: string | null;
+  expires_at: string | null;
+  max_uses: number | null;
+  max_devices: number | null;
+  one_time: boolean;
+  use_count: number;
+  device_count: number;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+  code?: string | null;
+}
+
+let mockShares: MockShare[] = [];
+let mockPasscodes: MockPasscode[] = [
+  {
+    id: uid(5001),
+    folder_id: uid(2003),
+    label: 'Reviewers',
+    expires_at: null,
+    max_uses: null,
+    max_devices: 3,
+    one_time: false,
+    use_count: 2,
+    device_count: 1,
+    revoked_at: null,
+    created_by: 'admin:demo@recsterio.local',
+    created_at: iso(5_000_000),
+  },
+];
+
+function mockFolderTree(): Folder[] {
+  const nodes = new Map<string, Folder>();
+  mockFolders.forEach((folder) => {
+    nodes.set(folder.id, {
+      ...folder,
+      video_count: mockVideos.filter((video) => video.folder_id === folder.id).length,
+      children: [],
+    });
+  });
+  const roots: Folder[] = [];
+  mockFolders.forEach((folder) => {
+    const node = nodes.get(folder.id);
+    if (!node) return;
+    if (folder.parent_id && nodes.has(folder.parent_id)) {
+      nodes.get(folder.parent_id)?.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
+
+function mockCard(video: Video): MockDataCard {
+  const transcripts = mockTranscripts
+    .filter((transcript) => transcript.video_id === video.id)
+    .sort((a, b) => b.version - a.version);
+  const transcript = transcripts[0] ?? null;
+  const folder = mockFolders.find((item) => item.id === video.folder_id) ?? null;
+  return {
+    video_id: video.id,
+    title: video.title,
+    source_url: video.source_url,
+    status: video.status,
+    duration_seconds: video.duration_seconds,
+    thumbnail_url: video.thumbnail_url,
+    folder_id: video.folder_id,
+    folder_name: folder?.name ?? null,
+    badge: transcript?.cleaned ? 'cleaned' : 'raw',
+    transcript_id: transcript?.id ?? null,
+    transcript_preview: transcript?.content ? transcript.content.slice(0, 240) : null,
+    audio_available: video.status === 'transcribed',
+    media_url: `/api/v1/videos/${video.id}/media`,
+    audio_url: `/api/v1/videos/${video.id}/audio`,
+    transcript_url: `/api/v1/videos/${video.id}/transcript`,
+  };
+}
+
+function mockMembers(folderId: string): FolderMember[] {
+  return mockFolderMembers
+    .filter((member) => member.folder_id === folderId)
+    .map(({ folder_id: _folderId, ...member }) => member);
+}
+
+const unauthorized = (message: string): MockResponse => ({
+  status: 401,
+  data: { error: { code: 'unauthorized', message } },
+});
+
 /** Routes a mock request. `path` is relative to the API base, e.g. "/videos?page=1". */
 export function mockRequest(method: string, path: string, body: unknown): MockResponse {
   const [rawPath, rawQuery = ''] = path.split('?');
@@ -682,6 +867,8 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
       platform: 'unknown',
       title: payload.title ?? null,
       notes: null,
+      folder_id: null,
+      position: 0,
       status: 'pending',
       progress: 0,
       error: null,
@@ -768,7 +955,7 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     }
 
     if (segments[2] === 'transcript' && segments.length === 3 && method === 'PUT') {
-      const payload = body as { content?: string; language?: string | null };
+      const payload = body as { content?: string; language?: string | null; cleaned?: boolean };
       const existing = mockTranscripts.filter((t) => t.video_id === videoId);
       const nextVersion = existing.reduce((max, t) => Math.max(max, t.version), 0) + 1;
       const created: Transcript = {
@@ -780,6 +967,7 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
         content: payload.content ?? '',
         segments: null,
         status: 'ready',
+        cleaned: payload.cleaned ?? true,
         error: null,
         created_by: 'admin:demo',
         created_at: new Date().toISOString(),
@@ -850,6 +1038,7 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
           1,
         source: 'merged',
         language: null,
+        cleaned: false,
         content: (merge.diff?.segments ?? [])
           .map((s) => s.merged_text ?? s.whisper_text ?? s.gemini_text ?? '')
           .join('\n'),
@@ -868,6 +1057,224 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     if (method === 'GET') {
       return { status: 200, data: clone(merge) };
     }
+  }
+
+
+  /* ------------------------------------------------ dataset (folders, cards) */
+
+  if (rawPath === '/auth/guest' && method === 'POST') {
+    return {
+      status: 200,
+      data: {
+        token: 'mock.guest.token',
+        role: 'guest',
+        email: null,
+        folder_ids: [],
+        expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
+      },
+    };
+  }
+
+  if (rawPath === '/auth/me' && method === 'GET') {
+    return {
+      status: 200,
+      data: {
+        actor: 'admin:demo@recsterio.local',
+        role: 'admin',
+        email: 'demo@recsterio.local',
+        name: 'Demo operator',
+        avatar_url: null,
+        folder_ids: [],
+      },
+    };
+  }
+
+  if (rawPath === '/public/config' && method === 'GET') {
+    return {
+      status: 200,
+      data: { google_client_id: '', google_enabled: false, guest_enabled: true },
+    };
+  }
+
+  if (rawPath === '/folders' && method === 'GET') {
+    return { status: 200, data: { items: mockFolderTree(), total: mockFolders.length } };
+  }
+
+  if (rawPath === '/folders' && method === 'POST') {
+    const payload = body as {
+      name?: string;
+      description?: string | null;
+      visibility?: 'public' | 'private';
+      parent_id?: string | null;
+    };
+    const folder: Folder = {
+      id: uid(2000 + mockFolders.length),
+      name: payload.name ?? 'New folder',
+      description: payload.description ?? null,
+      visibility: payload.visibility ?? 'private',
+      owner_id: uid(1),
+      owner_email: 'demo@recsterio.local',
+      parent_id: payload.parent_id ?? null,
+      position: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      video_count: 0,
+      my_role: 'editor',
+      children: [],
+    };
+    mockFolders.push(folder);
+    return { status: 201, data: clone(folder) };
+  }
+
+  if (rawPath === '/dataset/cards' && method === 'GET') {
+    const folderId = query.get('folder_id') ?? '';
+    const cleaned = query.get('cleaned');
+    const q = query.get('q') ?? '';
+    let items = mockVideos
+      .filter((v) => (!folderId || v.folder_id === folderId))
+      .map((v) => mockCard(v))
+      .filter((c) => (cleaned === null ? true : c.badge === 'cleaned') && (!q || matches(c.title, q) || matches(c.transcript_preview, q)));
+    return { status: 200, data: paginate(items, p('page', 1), p('page_size', 20)) };
+  }
+
+  if (segments[0] === 'folders' && segments.length >= 2) {
+    const folder = mockFolders.find((f) => f.id === segments[1]);
+    if (!folder) return notFound('Folder not found.');
+    if (segments.length === 2 && method === 'GET') return { status: 200, data: clone(folder) };
+    if (segments.length === 2 && method === 'PATCH') {
+      Object.assign(folder, body as Partial<Folder>);
+      return { status: 200, data: clone(folder) };
+    }
+    if (segments.length === 2 && method === 'DELETE') {
+      mockFolders = mockFolders.filter((f) => f.id !== folder.id);
+      return { status: 204, data: null };
+    }
+    if (segments[2] === 'members' && method === 'GET') {
+      return { status: 200, data: { items: mockMembers(folder.id) } };
+    }
+    if (segments[2] === 'members' && method === 'POST') {
+      const payload = body as { email?: string; role?: FolderRole };
+      const member = {
+        user_id: uid(3000 + mockMembers(folder.id).length),
+        email: payload.email ?? 'person@example.com',
+        name: null,
+        role: payload.role ?? 'viewer',
+        created_at: new Date().toISOString(),
+      };
+      mockFolderMembers.push({ folder_id: folder.id, ...member });
+      return { status: 201, data: member };
+    }
+    if (segments[2] === 'shares' && method === 'GET') {
+      return { status: 200, data: mockShares.filter((s) => s.folder_id === folder.id) };
+    }
+    if (segments[2] === 'shares' && method === 'POST') {
+      const payload = body as { role?: FolderRole; expires_at?: string | null };
+      const share = {
+        id: uid(4000 + mockShares.length),
+        folder_id: folder.id,
+        token: `mock-${Math.random().toString(36).slice(2, 12)}`,
+        role: payload.role ?? 'viewer',
+        expires_at: payload.expires_at ?? null,
+        revoked_at: null,
+        created_by: 'admin:demo@recsterio.local',
+        created_at: new Date().toISOString(),
+        url: '',
+      };
+      share.url = `${window.location.origin}/share/${share.token}`;
+      mockShares.push(share);
+      return { status: 201, data: share };
+    }
+    if (segments[2] === 'passcodes' && method === 'GET') {
+      return { status: 200, data: mockPasscodes.filter((c) => c.folder_id === folder.id) };
+    }
+    if (segments[2] === 'passcodes' && method === 'POST') {
+      const payload = body as { code?: string | null; label?: string | null; one_time?: boolean; max_uses?: number | null; max_devices?: number | null; expires_at?: string | null };
+      const generated = !payload.code;
+      const passcode = {
+        id: uid(5000 + mockPasscodes.length),
+        folder_id: folder.id,
+        label: payload.label ?? null,
+        expires_at: payload.expires_at ?? null,
+        max_uses: payload.max_uses ?? null,
+        max_devices: payload.max_devices ?? null,
+        one_time: Boolean(payload.one_time),
+        use_count: 0,
+        device_count: 0,
+        revoked_at: null,
+        created_by: 'admin:demo@recsterio.local',
+        created_at: new Date().toISOString(),
+        code: generated ? 'DEMO-PASS' : null,
+      };
+      mockPasscodes.push(passcode);
+      return { status: 201, data: clone(passcode) };
+    }
+    if (segments[2] === 'download' && method === 'GET') {
+      return notFound('ZIP export is not available in demo data.');
+    }
+  }
+
+  if (segments[0] === 'shares' && segments.length === 2 && method === 'DELETE') {
+    mockShares = mockShares.filter((s) => s.id !== segments[1]);
+    return { status: 204, data: null };
+  }
+
+  if (segments[0] === 'passcodes' && segments.length === 2 && method === 'DELETE') {
+    mockPasscodes = mockPasscodes.filter((c) => c.id !== segments[1]);
+    return { status: 204, data: null };
+  }
+
+  if (rawPath === '/public/folders' && method === 'GET') {
+    const roots = mockFolderTree().filter((f) => f.visibility === 'public');
+    return { status: 200, data: { items: roots, total: roots.length } };
+  }
+
+  if (segments[0] === 'public' && segments[1] === 'folders' && segments.length === 3 && method === 'GET') {
+    const folder = mockFolders.find((f) => f.id === segments[2]);
+    if (!folder) return notFound('Folder not found.');
+    return {
+      status: 200,
+      data: {
+        id: folder.id,
+        name: folder.name,
+        description: folder.description,
+        visibility: folder.visibility,
+        cards: mockVideos.filter((v) => v.folder_id === folder.id).map(mockCard),
+        children: [],
+      },
+    };
+  }
+
+  if (rawPath === '/public/passcodes/redeem' && method === 'POST') {
+    const payload = body as { folder_id?: string; code?: string };
+    const passcode = mockPasscodes.find(
+      (c) => c.folder_id === payload.folder_id && (c.code === payload.code || payload.code === 'DEMO-PASS'),
+    );
+    if (!passcode) return unauthorized('That passcode is not valid.');
+    return {
+      status: 200,
+      data: {
+        token: 'mock.guest.token',
+        expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
+        folder_id: payload.folder_id,
+        role: 'guest',
+        access: 'passcode',
+      },
+    };
+  }
+
+  if (segments[0] === 'public' && segments[1] === 'shares' && segments[3] === 'redeem' && method === 'POST') {
+    const share = mockShares.find((s) => s.token === segments[2] && !s.revoked_at);
+    if (!share) return notFound('This share link is not valid.');
+    return {
+      status: 200,
+      data: {
+        token: 'mock.guest.token',
+        expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
+        folder_id: share.folder_id,
+        role: 'guest',
+        access: 'share',
+      },
+    };
   }
 
   if (rawPath === '/jobs' && method === 'GET') {

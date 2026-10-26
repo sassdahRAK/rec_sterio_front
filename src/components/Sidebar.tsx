@@ -10,7 +10,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    to: '/',
+    to: '/overview',
     label: 'Overview',
     hint: 'Pipeline health',
     icon: (
@@ -75,7 +75,6 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           <li key={item.to}>
             <NavLink
               to={item.to}
-              end={item.to === '/'}
               onClick={onNavigate}
               className={({ isActive }) =>
                 `group flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors ${

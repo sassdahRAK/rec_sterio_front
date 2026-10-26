@@ -2,9 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Two palettes, one set of class names. The dataset portal is light (matching
+ * the approved mockups); the operations console is dark. `data-theme` on
+ * <html> picks the palette, so every existing component flips with it.
+ */
 @layer base {
   :root {
+    color-scheme: light;
+
+    --c-base: 246 247 249;
+    --c-card: 255 255 255;
+    --c-raised: 243 245 248;
+    --c-line: 226 230 236;
+    --c-line-soft: 237 240 245;
+    --c-fg: 19 25 33;
+    --c-dim: 74 85 99;
+    --c-faint: 122 134 149;
+    --c-accent: 59 111 224;
+    --c-accent-soft: 232 239 252;
+    --c-ok: 31 157 116;
+    --c-ok-soft: 230 246 240;
+    --c-warn: 176 122 18;
+    --c-warn-soft: 251 241 220;
+    --c-bad: 209 68 60;
+    --c-bad-soft: 252 234 232;
+    --c-info: 59 111 224;
+    --c-info-soft: 232 239 252;
+    --c-neutral: 92 102 117;
+    --c-neutral-soft: 238 241 245;
+    --c-violet: 122 91 214;
+    --c-violet-soft: 240 235 251;
+    --c-rose: 214 96 96;
+    --c-rose-soft: 253 238 238;
+
+    --c-inset: 255 255 255;
+    --c-shadow: 23 31 44;
+    --c-glow: 224 116 116;
+  }
+
+  .dark {
     color-scheme: dark;
+
+    --c-base: 15 19 26;
+    --c-card: 22 28 37;
+    --c-raised: 28 35 48;
+    --c-line: 40 49 62;
+    --c-line-soft: 32 40 54;
+    --c-fg: 228 233 240;
+    --c-dim: 150 162 179;
+    --c-faint: 108 119 135;
+    --c-accent: 91 141 239;
+    --c-accent-soft: 30 42 68;
+    --c-ok: 63 185 140;
+    --c-ok-soft: 18 41 31;
+    --c-warn: 224 169 63;
+    --c-warn-soft: 43 34 19;
+    --c-bad: 232 97 90;
+    --c-bad-soft: 46 24 23;
+    --c-info: 91 141 239;
+    --c-info-soft: 27 37 64;
+    --c-neutral: 124 135 152;
+    --c-neutral-soft: 30 36 46;
+    --c-violet: 156 123 232;
+    --c-violet-soft: 36 29 56;
+    --c-rose: 232 130 130;
+    --c-rose-soft: 44 28 30;
+
+    --c-inset: 255 255 255;
+    --c-shadow: 0 0 0;
+    --c-glow: 91 141 239;
   }
 
   html,
@@ -27,7 +94,7 @@
   }
 
   ::selection {
-    background-color: rgba(91, 141, 239, 0.32);
+    background-color: rgb(var(--c-accent) / 0.24);
   }
 
   *:focus-visible {
@@ -37,7 +104,7 @@
   /* Slim, unobtrusive scrollbars that match the console chrome. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #28313e transparent;
+    scrollbar-color: rgb(var(--c-line)) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -50,18 +117,18 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #28313e;
+    background-color: rgb(var(--c-line));
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #3a4757;
+    background-color: rgb(var(--c-faint) / 0.6);
   }
 
   input[type='search']::-webkit-search-cancel-button {
-    filter: invert(0.6);
+    filter: invert(0.4);
   }
 }
 
@@ -74,6 +141,42 @@
    */
   .card {
     @apply rounded-lg border border-line bg-card shadow-panel;
+  }
+
+  /* A dataset card: the soft halo from the design reference (#8). */
+  .glow-card {
+    @apply rounded-2xl border border-line bg-card shadow-glow;
+  }
+
+  /* The portal's page wash — a barely-there warm gradient, not a flat grey. */
+  .portal-wash {
+    background-image: radial-gradient(
+        60rem 32rem at 50% -12rem,
+        rgb(var(--c-glow) / 0.14),
+        transparent 70%
+      ),
+      radial-gradient(48rem 26rem at 88% 8%, rgb(var(--c-accent) / 0.08), transparent 65%);
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-full border border-line bg-card text-dim transition-colors hover:border-line hover:bg-raised hover:text-fg disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .tab {
+    @apply inline-flex items-center gap-1.5 border-b-2 border-transparent px-1 pb-2 text-sm font-medium text-faint transition-colors hover:text-fg;
+  }
+
+  .tab-active {
+    @apply border-accent text-fg;
+  }
+
+  /* Decorative audio bars that sit behind the native player. */
+  .wave-bar {
+    @apply w-[3px] shrink-0 rounded-full bg-fg/70;
   }
 }
 

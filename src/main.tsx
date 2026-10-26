@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { setMockEnabled } from './api/client';
 import { useAuthStore } from './store/auth';
+import { initTheme } from './store/theme';
 import './index.css';
 
 // `?mock=1` sticks for the whole session so the demo works without a backend.
@@ -11,8 +12,11 @@ if (new URLSearchParams(window.location.search).get('mock') === '1') {
   setMockEnabled(true);
 }
 
-// Re-hydrate the saved session before the first render so protected routes
-// never flash the login screen on a reload.
+// Apply the saved colour scheme before the first paint.
+initTheme();
+
+// Re-hydrate the saved session (or open a guest session) before the first
+// render so protected routes never flash the wrong screen on a reload.
 useAuthStore.getState().restore();
 
 const container = document.getElementById('root');

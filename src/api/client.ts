@@ -9,17 +9,31 @@
 import { mockRequest } from './mock';
 import type {
   CreateMergeRequest,
+  DatasetCardPage,
   ErrorDetail,
+  Folder,
+  FolderCreateRequest,
+  FolderList,
+  FolderMember,
+  FolderRole,
+  FolderUpdateRequest,
   GenerateTranscriptRequest,
   GenerateTranscriptResponse,
+  GuestSession,
+  GuestTokenResponse,
   Job,
   JobListQuery,
   ListResponse,
   LoginRequest,
   LoginResponse,
+  Me,
   Merge,
   Paginated,
+  Passcode,
+  PublicConfig,
+  PublicFolder,
   Segment,
+  ShareLink,
   Stats,
   Transcript,
   UpdateTranscriptRequest,
@@ -174,6 +188,20 @@ function toApiError(status: number, payload: unknown): ApiError {
 export const authApi = {
   login: (credentials: LoginRequest): Promise<LoginResponse> =>
     request<LoginResponse>('/auth/login', { method: 'POST', body: credentials, auth: false }),
+
+  /** Anonymous session: public datasets are readable without an account (#3). */
+  guest: (): Promise<GuestSession> =>
+    request<GuestSession>('/auth/guest', { method: 'POST', auth: false }),
+
+  /** Google Identity Services hands the browser an ID token; the API verifies it. */
+  google: (credential: string): Promise<LoginResponse> =>
+    request<LoginResponse>('/auth/google', {
+      method: 'POST',
+      body: { credential },
+      auth: false,
+    }),
+
+  me: (): Promise<Me> => request<Me>('/auth/me'),
 };
 
 /* ------------------------------------------------------------------ stats */
@@ -308,6 +336,13 @@ export const transcriptsApi = {
   save: (videoId: string, body: UpdateTranscriptRequest): Promise<Transcript> =>
     request<Transcript>(`/videos/${videoId}/transcript`, { method: 'PUT', body }),
 
+  /** Toggle the Raw/Cleaned badge without creating a new version (#8). */
+  setCleaned: (videoId: string, cleaned: boolean): Promise<Transcript> =>
+    request<Transcript>(`/videos/${videoId}/transcript`, {
+      method: 'PATCH',
+      body: { cleaned },
+    }),
+
   generate: async (videoId: string, body: GenerateTranscriptRequest): Promise<GenerateTranscriptResponse> => {
     // The contract says `{"jobs":[...]}`, but tolerate a bare job object too.
     const raw = await request<GenerateTranscriptResponse | Job>(`/videos/${videoId}/transcript/generate`, {
@@ -350,4 +385,210 @@ export const jobsApi = {
   retry: (id: string): Promise<Job> => request<Job>(`/jobs/${id}/retry`, { method: 'POST' }),
 
   cancel: (id: string): Promise<Job> => request<Job>(`/jobs/${id}/cancel`, { method: 'POST' }),
+};
+
+/* --------------------------------------------------------------- blobs */
+
+/**
+ * Fetch a binary endpoint (media, audio, ZIP) with the bearer token, which a
+ * plain <video src> or <a href> cannot carry for a protected resource.
+ */
+async function requestBlob(path: string): Promise<Blob> {
+  if (isMockEnabled()) {
+    throw new ApiError('not_found', 'This file is not available in demo data.', 404);
+  }
+  const token = readToken();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError(
+      'network_error',
+      'Could not reach the recsterio API. Check that the backend is running.',
+      0,
+    );
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+    }
+    throw toApiError(response.status, payload);
+  }
+  return response.blob();
+}
+
+/** Save a blob under a filename (used for ZIP exports and audio downloads). */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Give the browser a tick to start the download before revoking.
+  window.setTimeout(() => URL.revokeObjectURL(url), 4_000);
+}
+
+/* ------------------------------------------------------------- folders */
+
+export interface FolderListQuery {
+  parent_id?: string;
+  visibility?: string;
+}
+
+export const foldersApi = {
+  list: (query: FolderListQuery = {}): Promise<FolderList> =>
+    request<FolderList>('/folders', { query: { ...query } }),
+
+  get: (id: string): Promise<Folder> => request<Folder>(`/folders/${id}`),
+
+  create: (body: FolderCreateRequest): Promise<Folder> =>
+    request<Folder>('/folders', { method: 'POST', body }),
+
+  update: (id: string, body: FolderUpdateRequest): Promise<Folder> =>
+    request<Folder>(`/folders/${id}`, { method: 'PATCH', body }),
+
+  remove: (id: string): Promise<void> => request<void>(`/folders/${id}`, { method: 'DELETE' }),
+
+  videos: (id: string): Promise<Video[]> => request<Video[]>(`/folders/${id}/videos`),
+
+  placeVideo: (videoId: string, folderId: string | null): Promise<Video> =>
+    request<Video>(`/videos/${videoId}/folder`, {
+      method: 'PUT',
+      body: { folder_id: folderId },
+    }),
+
+  transcriptIndex: (id: string): Promise<Record<string, unknown>> =>
+    request<Record<string, unknown>>(`/folders/${id}/transcripts`),
+
+  /** One ZIP of video + audio + transcript for the folder and its subtree (#5, #6). */
+  zip: async (id: string): Promise<Blob> => requestBlob(`/folders/${id}/download`),
+
+  members: (id: string): Promise<ListResponse<FolderMember>> =>
+    request<ListResponse<FolderMember>>(`/folders/${id}/members`),
+
+  invite: (id: string, email: string, role: FolderRole): Promise<FolderMember> =>
+    request<FolderMember>(`/folders/${id}/members`, {
+      method: 'POST',
+      body: { email, role },
+    }),
+
+  setMemberRole: (id: string, userId: string, role: FolderRole): Promise<FolderMember> =>
+    request<FolderMember>(`/folders/${id}/members/${userId}`, {
+      method: 'PATCH',
+      body: { role },
+    }),
+
+  removeMember: (id: string, userId: string): Promise<void> =>
+    request<void>(`/folders/${id}/members/${userId}`, { method: 'DELETE' }),
+};
+
+/* -------------------------------------------------------------- dataset */
+
+export interface DatasetCardQuery {
+  folder_id?: string;
+  cleaned?: boolean;
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export const datasetApi = {
+  cards: (query: DatasetCardQuery = {}): Promise<DatasetCardPage> =>
+    request<DatasetCardPage>('/dataset/cards', {
+      query: {
+        folder_id: query.folder_id,
+        cleaned: query.cleaned === undefined ? undefined : String(query.cleaned),
+        q: query.q,
+        page: query.page,
+        page_size: query.page_size,
+      },
+    }),
+};
+
+/* -------------------------------------------------------- share links */
+
+export const sharesApi = {
+  list: (folderId: string): Promise<ShareLink[]> =>
+    request<ShareLink[]>(`/folders/${folderId}/shares`),
+
+  create: (folderId: string, role: FolderRole, expiresAt?: string | null): Promise<ShareLink> =>
+    request<ShareLink>(`/folders/${folderId}/shares`, {
+      method: 'POST',
+      body: { role, expires_at: expiresAt ?? null },
+    }),
+
+  revoke: (id: string): Promise<void> =>
+    request<void>(`/shares/${id}`, { method: 'DELETE' }),
+};
+
+/* ----------------------------------------------------------- passcodes */
+
+export interface PasscodeCreateRequest {
+  code?: string | null;
+  label?: string | null;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  max_devices?: number | null;
+  one_time?: boolean;
+}
+
+export const passcodesApi = {
+  list: (folderId: string): Promise<Passcode[]> =>
+    request<Passcode[]>(`/folders/${folderId}/passcodes`),
+
+  create: (folderId: string, body: PasscodeCreateRequest): Promise<Passcode> =>
+    request<Passcode>(`/folders/${folderId}/passcodes`, { method: 'POST', body }),
+
+  revoke: (id: string): Promise<void> =>
+    request<void>(`/passcodes/${id}`, { method: 'DELETE' }),
+};
+
+/* --------------------------------------------------------- public portal */
+
+export const publicApi = {
+  config: (): Promise<PublicConfig> =>
+    request<PublicConfig>('/public/config', { auth: false }),
+
+  folders: (): Promise<ListResponse<PublicFolder>> =>
+    request<ListResponse<PublicFolder>>('/public/folders'),
+
+  folder: (id: string): Promise<PublicFolder> => request<PublicFolder>(`/public/folders/${id}`),
+
+  zip: async (id: string): Promise<Blob> => requestBlob(`/public/folders/${id}/zip`),
+
+  redeemPasscode: (
+    folderId: string,
+    code: string,
+    deviceKey: string,
+  ): Promise<GuestTokenResponse> =>
+    request<GuestTokenResponse>('/public/passcodes/redeem', {
+      method: 'POST',
+      auth: false,
+      body: { folder_id: folderId, code, device_key: deviceKey },
+    }),
+
+  redeemShare: (token: string, deviceKey: string): Promise<GuestTokenResponse> =>
+    request<GuestTokenResponse>(`/public/shares/${token}/redeem`, {
+      method: 'POST',
+      auth: false,
+      body: { device_key: deviceKey },
+    }),
+};
+
+/* ---------------------------------------------------------------- media */
+
+export const mediaApi = {
+  video: (videoId: string): Promise<Blob> => requestBlob(`/videos/${videoId}/media`),
+  audio: (videoId: string): Promise<Blob> => requestBlob(`/videos/${videoId}/audio`),
 };

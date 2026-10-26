@@ -1,0 +1,18 @@
+1. An admin user can create folders (public, private) and share the link and/or invite other users to access their folder (can view, can edit, can comment) 
+
+2. A user can log in via Google or Gmail 
+3. Guest User, can view our public data set without login
+
+4. Guest User can view private dataset folder by input the correct pass that the owner admin have been set
+
+5. For the dataset, allow users to download by zip the video, audio and transcript as a ZIP file 
+
+6. for the folder have many video package, by allowing many sub-folder (video, audio, transcript) per unit and zip under the superset folder for download
+
+7. for password, for guess to view private folder - user owner of the folder can generate/customize the pass and set limit duration expire or never reach limit and alow one time pass and limit the number device can acess vai those password
+
+8. for cleaned data allow to view like the card given img
+
+9. for each data card allow user to edit and delete 
+
+10. just pass the link in side the box in the tab auto scrape to download the video and transcrip, user can pase direct to the video link or application domain.

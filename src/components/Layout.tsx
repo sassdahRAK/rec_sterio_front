@@ -7,7 +7,7 @@ import Toast from './Toast';
 import { btnNeutral } from './ui';
 
 const routeTitles: Record<string, string> = {
-  '/': 'Overview',
+  '/overview': 'Overview',
   '/videos': 'Videos',
   '/jobs': 'Jobs',
 };

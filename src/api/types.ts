@@ -48,6 +48,8 @@ export interface Video {
   platform: VideoPlatform | string;
   title: string | null;
   notes: string | null;
+  folder_id: string | null;
+  position: number;
   status: VideoStatus | string;
   progress: number;
   error: string | null;
@@ -84,6 +86,8 @@ export interface Transcript {
   content: string;
   segments: Segment[] | null;
   status: TranscriptStatus | string;
+  /** Human-corrected version → the card shows a "Cleaned" badge. */
+  cleaned: boolean;
   error: string | null;
   created_by: string;
   created_at: string;
@@ -179,6 +183,35 @@ export interface LoginResponse {
   token: string;
   email: string;
   expires_at: string;
+  role?: Role;
+  name?: string | null;
+}
+
+export type Role = 'admin' | 'member' | 'guest' | 'telegram';
+
+/** Who the bearer token belongs to (GET /auth/me). */
+export interface Me {
+  actor: string;
+  role: Role | string;
+  email: string | null;
+  name: string | null;
+  avatar_url: string | null;
+  folder_ids: string[];
+}
+
+/** POST /auth/guest — an anonymous session that may read public folders. */
+export interface GuestSession {
+  token: string;
+  role: Role;
+  email: string | null;
+  folder_ids: string[];
+  expires_at: string;
+}
+
+export interface PublicConfig {
+  google_client_id: string;
+  google_enabled: boolean;
+  guest_enabled: boolean;
 }
 
 export interface LoginRequest {
@@ -208,6 +241,131 @@ export interface UpdateTranscriptRequest {
   content: string;
   segments?: Segment[] | null;
   language?: string | null;
+  /** Defaults to true on the server: a manual edit is a human correction. */
+  cleaned?: boolean;
+}
+
+/* ------------------------------------------------------------- dataset (sharing) */
+
+export type FolderVisibility = 'public' | 'private';
+export type FolderRole = 'viewer' | 'commenter' | 'editor';
+
+export interface Folder {
+  id: string;
+  name: string;
+  description: string | null;
+  visibility: FolderVisibility | string;
+  owner_id: string;
+  owner_email: string | null;
+  parent_id: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  video_count: number;
+  my_role: FolderRole | string | null;
+  children: Folder[];
+}
+
+export interface FolderList {
+  items: Folder[];
+  total: number;
+}
+
+export interface FolderCreateRequest {
+  name: string;
+  description?: string | null;
+  visibility?: FolderVisibility;
+  parent_id?: string | null;
+}
+
+export interface FolderUpdateRequest {
+  name?: string;
+  description?: string | null;
+  visibility?: FolderVisibility;
+  parent_id?: string | null;
+  position?: number;
+}
+
+/** One video as the dataset cards show it (GET /dataset/cards). */
+export interface DataCard {
+  video_id: string;
+  title: string | null;
+  source_url: string | null;
+  status: string;
+  duration_seconds: number | null;
+  thumbnail_url: string | null;
+  folder_id: string | null;
+  folder_name: string | null;
+  badge: 'raw' | 'cleaned';
+  transcript_id: string | null;
+  transcript_preview: string | null;
+  audio_available: boolean;
+  media_url: string;
+  audio_url: string;
+  transcript_url: string;
+}
+
+export interface DatasetCardPage {
+  items: DataCard[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface FolderMember {
+  user_id: string;
+  email: string;
+  name: string | null;
+  role: FolderRole | string;
+  created_at: string;
+}
+
+export interface ShareLink {
+  id: string;
+  folder_id: string;
+  token: string;
+  role: FolderRole | string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+  /** Present only in the create response. */
+  url?: string;
+}
+
+export interface Passcode {
+  id: string;
+  folder_id: string;
+  label: string | null;
+  expires_at: string | null;
+  max_uses: number | null;
+  max_devices: number | null;
+  one_time: boolean;
+  use_count: number;
+  device_count: number;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+  /** Returned exactly once when the server generated the code. */
+  code?: string | null;
+}
+
+export interface GuestTokenResponse {
+  token: string;
+  expires_at: string;
+  folder_id: string;
+  role: string;
+  access: 'passcode' | 'share' | 'public';
+}
+
+/** A folder as the guest portal renders it. */
+export interface PublicFolder {
+  id: string;
+  name: string;
+  description: string | null;
+  visibility: string;
+  cards: DataCard[];
+  children: PublicFolder[];
 }
 
 export type TranscriptEngine = 'whisper' | 'gemini' | 'both';
