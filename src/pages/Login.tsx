@@ -61,8 +61,6 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const googleSlot = useRef<HTMLDivElement | null>(null);
 
-  if (isAuthenticated) return <Navigate to="/dataset" replace />;
-
   // Which sign-in options this deployment offers.
   useEffect(() => {
     if (demo) {
@@ -163,6 +161,11 @@ export default function Login() {
     }
   };
 
+  // Every hook above has run, so the render order is stable. Redirecting before
+  // the hooks would change it the moment `login()` flips `isAuthenticated`, and
+  // React would unmount the whole tree instead of navigating.
+  if (isAuthenticated) return <Navigate to="/dataset" replace />;
+
   return (
     <div className="portal-wash flex min-h-screen items-center justify-center bg-base px-4 py-10 text-fg">
       <div className="absolute right-4 top-4">
@@ -171,7 +174,14 @@ export default function Login() {
 
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center gap-2.5">
-          <img src="/logo.png" alt="" width={34} height={34} className="h-[34px] w-[34px] rounded-full ring-1 ring-line" />
+          <img
+            // BASE_URL keeps the asset under /console/ in the deployed build.
+            src={`${import.meta.env.BASE_URL}logo.png`}
+            alt=""
+            width={34}
+            height={34}
+            className="h-[34px] w-[34px] rounded-full ring-1 ring-line"
+          />
           <div className="leading-tight">
             <p className="font-display text-base font-bold tracking-tight">RecSterio</p>
             <p className="text-2xs uppercase tracking-[0.18em] text-faint">Khmer–English dataset</p>

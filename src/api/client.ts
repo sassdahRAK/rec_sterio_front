@@ -42,9 +42,12 @@ import type {
   VideoListQuery,
 } from './types';
 
+// Relative by default: the dev server proxies `/api` (vite.config.ts) and the
+// deployed dashboard is served from the same origin as the API. Set
+// VITE_API_BASE_URL to an absolute URL only when the two are on different hosts.
 export const API_BASE: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ||
-  'http://localhost:8000/api/v1';
+  '/api/v1';
 
 export const TOKEN_STORAGE_KEY = 'recsterio.admin.token';
 export const EMAIL_STORAGE_KEY = 'recsterio.admin.email';

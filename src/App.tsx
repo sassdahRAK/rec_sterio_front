@@ -1,19 +1,23 @@
 import { useEffect, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import AppShell from './components/AppShell';
 import Layout from './components/Layout';
 import Spinner from './components/Spinner';
-import Cleaned from './pages/Cleaned';
 import Dataset from './pages/Dataset';
 import Jobs from './pages/Jobs';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
-import Scrape from './pages/Scrape';
-import ShareLanding from './pages/ShareLanding';
 import VideoDetailPage from './pages/VideoDetail';
 import Videos from './pages/Videos';
 import { registerUnauthorizedHandler, useAuthStore } from './store/auth';
 
+/**
+ * The operations console.
+ *
+ * Everything here requires an operator account. The public dataset portal is a
+ * separate app (`portal/`): browsing public folders, redeeming share links and
+ * opening a private folder with a passcode all happen there, so this console
+ * never has to expose a guest-facing surface.
+ */
 function RequireAuth({ children }: { children: ReactNode }) {
   const ready = useAuthStore((s) => s.ready);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -42,18 +46,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/share/:token" element={<ShareLanding />} />
 
-      {/* The dataset portal — guests welcome. */}
-      <Route element={<AppShell />}>
-        <Route index element={<Navigate to="/scrape" replace />} />
-        <Route path="scrape" element={<Scrape />} />
-        <Route path="dataset" element={<Dataset />} />
-        <Route path="dataset/f/:folderId" element={<Dataset />} />
-        <Route path="cleaned" element={<Cleaned />} />
-      </Route>
-
-      {/* The operations console — signed-in users only. */}
       <Route
         element={
           <RequireAuth>
@@ -61,13 +54,17 @@ export default function App() {
           </RequireAuth>
         }
       >
+        <Route index element={<Navigate to="/overview" replace />} />
         <Route path="overview" element={<Overview />} />
         <Route path="videos" element={<Videos />} />
         <Route path="videos/:id" element={<VideoDetailPage />} />
         <Route path="jobs" element={<Jobs />} />
+        {/* Folders, share links, passcodes and the cleaned-data cards. */}
+        <Route path="dataset" element={<Dataset />} />
+        <Route path="dataset/f/:folderId" element={<Dataset />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/scrape" replace />} />
+      <Route path="*" element={<Navigate to="/overview" replace />} />
     </Routes>
   );
 }

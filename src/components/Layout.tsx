@@ -9,6 +9,7 @@ import { btnNeutral } from './ui';
 const routeTitles: Record<string, string> = {
   '/overview': 'Overview',
   '/videos': 'Videos',
+  '/dataset': 'Dataset',
   '/jobs': 'Jobs',
 };
 
@@ -23,7 +24,12 @@ export default function Layout() {
     setMenuOpen(false);
   }, [location.pathname]);
 
-  const title = location.pathname.startsWith('/videos/') ? 'Video detail' : routeTitles[location.pathname] ?? 'recsterio';
+  const title =
+    location.pathname.startsWith('/videos/')
+      ? 'Video detail'
+      : location.pathname.startsWith('/dataset/')
+        ? 'Dataset folder'
+        : (routeTitles[location.pathname] ?? 'recsterio');
 
   return (
     <div className="flex min-h-screen bg-base text-fg">

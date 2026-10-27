@@ -16,12 +16,10 @@ import FolderRail from '../components/FolderRail';
 import Pagination from '../components/Pagination';
 import PasscodeDialog from '../components/PasscodeDialog';
 import ShareDialog from '../components/ShareDialog';
-import UnlockDialog from '../components/UnlockDialog';
 import { btnNeutral, btnPrimary, inputCls } from '../components/ui';
 import {
   DownloadIcon,
   KeyIcon,
-  LockIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -53,7 +51,6 @@ export default function Dataset() {
   const [debounced, setDebounced] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [folderDialog, setFolderDialog] = useState<{ open: boolean; parentId: string | null }>({
@@ -65,7 +62,6 @@ export default function Dataset() {
   const [editCard, setEditCard] = useState<DataCardModel | null>(null);
   const [deleteCard, setDeleteCard] = useState<DataCardModel | null>(null);
   const [deleteFolder, setDeleteFolder] = useState<Folder | null>(null);
-  const [unlockOpen, setUnlockOpen] = useState(false);
 
   const allFolders = useMemo(() => flatten(folders), [folders]);
   const selectedFolder = useMemo(
@@ -80,7 +76,6 @@ export default function Dataset() {
 
   const canPublish = role === 'admin';
   const canManageSelected = isAuthenticated && selectedFolder?.my_role === 'editor';
-  const canCreate = isAuthenticated;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(search.trim()), 300);
@@ -96,21 +91,8 @@ export default function Dataset() {
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
-    setLocked(false);
     try {
-      const [tree] = await Promise.all([loadFolders()]);
-      if (folderId && !flatten(tree).some((folder) => folder.id === folderId)) {
-        // A folder reached by id (share/passcode link) may not be in the list
-        // the portal returns; fetch it directly, and offer the passcode door
-        // when it is private and we hold no token for it.
-        try {
-          await foldersApi.get(folderId);
-        } catch (err) {
-          const apiError = err as ApiError;
-          if (apiError instanceof ApiError && apiError.status === 404) setLocked(true);
-          else throw err;
-        }
-      }
+      await loadFolders();
       const result = await datasetApi.cards({
         folder_id: folderId ?? undefined,
         q: debounced || undefined,
@@ -215,19 +197,13 @@ export default function Dataset() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {canCreate ? (
-            <button
-              type="button"
-              onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
-              className={btnPrimary}
-            >
-              <PlusIcon size={14} /> New folder
-            </button>
-          ) : (
-            <button type="button" onClick={() => navigate('/login')} className={btnPrimary}>
-              Sign in to contribute
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
+            className={btnPrimary}
+          >
+            <PlusIcon size={14} /> New folder
+          </button>
         </div>
       </div>
 
@@ -336,26 +312,7 @@ export default function Dataset() {
         <section className="min-w-0">
           {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
 
-          {locked ? (
-            <div className="glow-card p-6 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-raised text-dim">
-                <LockIcon size={20} />
-              </span>
-              <h2 className="mt-3 font-display text-base font-semibold text-fg">
-                This folder is private
-              </h2>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-dim">
-                Ask the owner for the passcode, or open the share link they sent you.
-              </p>
-              <button
-                type="button"
-                onClick={() => setUnlockOpen(true)}
-                className={`${btnPrimary} mt-4`}
-              >
-                <KeyIcon size={14} /> Enter a passcode
-              </button>
-            </div>
-          ) : loading ? (
+          {loading ? (
             <div className="grid gap-4 md:grid-cols-2">
               {[0, 1].map((key) => (
                 <div key={key} className="glow-card h-[26rem] animate-pulse bg-raised/40" />
@@ -372,21 +329,19 @@ export default function Dataset() {
               <p className="mx-auto mt-1 max-w-md text-sm text-dim">
                 {tab === 'mine'
                   ? 'Create a folder, then file recordings into it from a card’s edit dialog.'
-                  : 'Paste a link in Auto scrape, or open a folder that already has data.'}
+                  : 'Add a recording from the video library, or open a folder that already has data.'}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button type="button" onClick={() => navigate('/scrape')} className={btnPrimary}>
-                  Auto scrape
+                <button type="button" onClick={() => navigate('/videos')} className={btnPrimary}>
+                  Open the video library
                 </button>
-                {canCreate ? (
-                  <button
-                    type="button"
-                    onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
-                    className={btnNeutral}
-                  >
-                    New folder
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
+                  className={btnNeutral}
+                >
+                  New folder
+                </button>
               </div>
             </div>
           ) : (
@@ -472,12 +427,6 @@ export default function Dataset() {
         busy={busy}
         onConfirm={() => void removeFolder()}
         onCancel={() => setDeleteFolder(null)}
-      />
-
-      <UnlockDialog
-        open={unlockOpen}
-        folderId={folderId}
-        onClose={() => setUnlockOpen(false)}
       />
     </div>
   );

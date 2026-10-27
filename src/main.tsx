@@ -24,7 +24,8 @@ if (!container) throw new Error('Root container #root is missing from index.html
 
 createRoot(container).render(
   <StrictMode>
-    <BrowserRouter>
+    {/* BASE_URL is `/` in dev and `/console/` in the deployed build. */}
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <App />
     </BrowserRouter>
   </StrictMode>,
