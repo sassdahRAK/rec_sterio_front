@@ -23,32 +23,42 @@ export default function Jobs() {
   const [videoTitles, setVideoTitles] = useState<Record<string, string>>({});
   const titleCache = useRef<Record<string, string>>({});
 
+  // Returns a cleanup function so the effect can cancel it: a filter change can
+  // overlap the previous request, and a 5 s auto-refresh can overlap a manual
+  // one. Without the guard the slower, older response wins.
   const load = useCallback(
-    async (silent = false): Promise<void> => {
+    (silent = false): (() => void) => {
+      let cancelled = false;
       if (!silent) setLoading(true);
-      try {
-        const result = await jobsApi.list(query);
-        setJobs(result.items);
-        setTotal(result.total);
-        setLastUpdated(new Date());
-        setError(null);
-      } catch (err) {
-        setError(err);
-      } finally {
-        setLoading(false);
-      }
+      jobsApi
+        .list(query)
+        .then((result) => {
+          if (cancelled) return;
+          setJobs(result.items);
+          setTotal(result.total);
+          setLastUpdated(new Date());
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setError(err);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     },
     [query],
   );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => load(), [load]);
 
   // Auto-refresh the queue so running jobs visibly advance.
   useEffect(() => {
     if (!autoRefresh) return;
-    const timer = window.setInterval(() => void load(true), REFRESH_MS);
+    const timer = window.setInterval(() => load(true), REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [autoRefresh, load]);
 
@@ -82,7 +92,7 @@ export default function Jobs() {
     try {
       await jobsApi.retry(job.id);
       toast.success(`Job ${job.kind} re-queued with a fresh attempt budget.`);
-      await load(true);
+      load(true);
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -96,7 +106,7 @@ export default function Jobs() {
     try {
       await jobsApi.cancel(job.id);
       toast.info(`Job ${job.kind} cancelled.`);
-      await load(true);
+      load(true);
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -112,9 +122,9 @@ export default function Jobs() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl font-semibold tracking-tight text-fg">Job queue</h2>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+        <div className="shrink-0">
+          <h2 className="font-display text-2xl font-bold tracking-tight text-fg">Job queue</h2>
           <p className="mt-0.5 text-sm text-dim">
             {loading ? 'Loading…' : `${total} job${total === 1 ? '' : 's'} matching the current filters`}
             {lastUpdated ? (
@@ -123,7 +133,7 @@ export default function Jobs() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-dim">
             <input
               type="checkbox"
@@ -133,7 +143,7 @@ export default function Jobs() {
             />
             Auto-refresh every 5s
           </label>
-          <button type="button" onClick={() => void load()} className={btnNeutral}>
+          <button type="button" onClick={() => void load()} className={`${btnNeutral} rounded-full`}>
             {loading ? <Spinner className="h-3.5 w-3.5" /> : null}
             Refresh
           </button>

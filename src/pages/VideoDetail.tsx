@@ -287,12 +287,12 @@ export default function VideoDetailPage() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+        <div className="min-w-0 shrink-0">
           <Link to="/videos" className="text-xs text-faint transition hover:text-accent">
             ← Video library
           </Link>
-          <h2 className="mt-1 truncate font-display text-xl font-semibold tracking-tight text-fg">{videoTitle}</h2>
+          <h2 className="mt-1 max-w-[34rem] truncate font-display text-2xl font-bold tracking-tight text-fg">{videoTitle}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <StatusBadge status={String(detail.status)} />
             <PlatformBadge platform={String(detail.platform)} />
@@ -301,7 +301,7 @@ export default function VideoDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5">
             <label htmlFor="engine" className="sr-only">
               Transcription engine
@@ -310,24 +310,24 @@ export default function VideoDetailPage() {
               id="engine"
               value={engine}
               onChange={(e) => setEngine(e.target.value as TranscriptEngine)}
-              className={`${selectCls} w-32`}
+              className={`${selectCls} w-32 rounded-full`}
             >
               <option value="both">both</option>
               <option value="whisper">whisper</option>
               <option value="gemini">gemini</option>
             </select>
-            <button type="button" onClick={() => void onGenerate()} disabled={generating || polling} className={btnPrimary}>
+            <button type="button" onClick={() => void onGenerate()} disabled={generating || polling} className={`${btnPrimary} rounded-full`}>
               {generating || polling ? <Spinner className="h-3.5 w-3.5" /> : null}
               {polling ? 'Transcribing…' : 'Generate transcript'}
             </button>
           </div>
-          <button type="button" onClick={() => void onStartMerge()} className={btnNeutral}>
+          <button type="button" onClick={() => void onStartMerge()} className={`${btnNeutral} rounded-full`}>
             Start merge
           </button>
-          <button type="button" onClick={() => void onRetryVideo()} className={btnNeutral}>
+          <button type="button" onClick={() => void onRetryVideo()} className={`${btnNeutral} rounded-full`}>
             Retry
           </button>
-          <button type="button" onClick={() => setDeleteOpen(true)} className={btnDanger}>
+          <button type="button" onClick={() => setDeleteOpen(true)} className={`${btnDanger} rounded-full`}>
             Delete
           </button>
         </div>

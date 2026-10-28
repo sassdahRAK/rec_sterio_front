@@ -82,37 +82,59 @@ export default function Dataset() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const loadFolders = useCallback(async (): Promise<Folder[]> => {
-    const result = await foldersApi.list();
-    setFolders(result.items);
-    return result.items;
+  const loadFolders = useCallback((): (() => void) => {
+    let cancelled = false;
+    foldersApi.list().then(
+      (result) => {
+        if (!cancelled) setFolders(result.items);
+      },
+      () => {
+        // A failed folder listing must not blank the cards; the rail just
+        // shows whatever it had.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const load = useCallback(async (): Promise<void> => {
+  // Returns a cleanup function so the effect can cancel it. The debounced
+  // search and the pager both retrigger this, and a slow earlier request must
+  // not overwrite a newer one.
+  const load = useCallback((): (() => void) => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      await loadFolders();
-      const result = await datasetApi.cards({
+    Promise.all([
+      foldersApi.list(),
+      datasetApi.cards({
         folder_id: folderId ?? undefined,
         q: debounced || undefined,
         page,
         page_size: PAGE_SIZE,
+      }),
+    ])
+      .then(([folderList, result]) => {
+        if (cancelled) return;
+        setFolders(folderList.items);
+        setCards(result.items);
+        setTotal(result.total);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err);
+        setCards([]);
+        setTotal(0);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      setCards(result.items);
-      setTotal(result.total);
-    } catch (err) {
-      setError(err);
-      setCards([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [folderId, debounced, page, loadFolders]);
+    return () => {
+      cancelled = true;
+    };
+  }, [folderId, debounced, page]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => load(), [load]);
 
   const visibleCards = useMemo(() => {
     if (tab === 'all' || !email) return cards;
@@ -159,7 +181,7 @@ export default function Dataset() {
       await videosApi.remove(deleteCard.video_id);
       toast.success('Card deleted.');
       setDeleteCard(null);
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'delete_failed', apiError.message);
@@ -176,7 +198,7 @@ export default function Dataset() {
       toast.success(`Folder “${deleteFolder.name}” deleted. Its videos were kept, unfiled.`);
       setDeleteFolder(null);
       if (folderId === deleteFolder.id) navigate('/dataset');
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'delete_failed', apiError.message);
@@ -187,27 +209,38 @@ export default function Dataset() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+        <div className="shrink-0">
           <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Dataset</h1>
           <p className="mt-0.5 text-sm text-dim">
             {selectedFolder ? selectedFolder.name : 'Every recording you can see'} ·{' '}
             {loading ? 'loading…' : `${total} unit${total === 1 ? '' : 's'}`}
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
-            className={btnPrimary}
-          >
-            <PlusIcon size={14} /> New folder
-          </button>
+        <div className="relative mx-auto w-full max-w-md">
+          <SearchIcon size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search recordings…"
+            aria-label="Search recordings"
+            className={`${inputCls} rounded-full py-2 pl-9`}
+          />
         </div>
+        <button
+          type="button"
+          onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
+          className={`${btnPrimary} shrink-0 rounded-full`}
+        >
+          <PlusIcon size={14} /> New folder
+        </button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
+      <div className="border-b border-line pb-2">
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -225,21 +258,6 @@ export default function Dataset() {
           >
             My Folder
           </button>
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <SearchIcon size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Search recordings…"
-            aria-label="Search recordings"
-            className={`${inputCls} pl-8`}
-          />
         </div>
       </div>
 

@@ -7,6 +7,7 @@ import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import { statusColor, toneForStatus } from '../components/StatusBadge';
 import { formatBytes, formatRelative, truncate } from '../lib/format';
+import { btnNeutral } from '../components/ui';
 
 const statusOrder = [
   'pending',
@@ -88,9 +89,9 @@ export default function Overview() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl font-semibold tracking-tight text-fg">Pipeline overview</h2>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+        <div className="shrink-0">
+          <h2 className="font-display text-2xl font-bold tracking-tight text-fg">Pipeline overview</h2>
           <p className="mt-0.5 text-sm text-dim">
             Live counters from <span className="font-mono text-xs text-faint">GET /api/v1/stats</span>
           </p>
@@ -101,7 +102,7 @@ export default function Overview() {
             setLoading(true);
             void load();
           }}
-          className="rounded-md border border-line bg-raised px-3 py-1.5 text-xs text-dim transition hover:text-fg"
+          className={`${btnNeutral} ml-auto rounded-full`}
         >
           Refresh
         </button>

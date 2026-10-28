@@ -10,6 +10,7 @@ import VideoTable from '../components/VideoTable';
 import { PLATFORMS, VIDEO_STATUSES } from '../api/types';
 import { toast } from '../store/toast';
 import { btnNeutral, btnPrimary, inputCls, labelCls, selectCls } from '../components/ui';
+import { SearchIcon } from '../components/icons';
 
 export default function Videos() {
   const navigate = useNavigate();
@@ -32,31 +33,41 @@ export default function Videos() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const load = useCallback(async (): Promise<void> => {
+  // Returns a cleanup function so the effect can cancel it. A debounced search
+  // can overlap a newer one; without the guard, whichever resolves last wins and
+  // clearing the box leaves the stale empty result on screen.
+  const load = useCallback((): (() => void) => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const result = await videosApi.list(query);
-      setVideos(result.items);
-      setTotal(result.total);
-    } catch (err) {
-      setError(err);
-      setVideos([]);
-    } finally {
-      setLoading(false);
-    }
+    videosApi
+      .list(query)
+      .then((result) => {
+        if (cancelled) return;
+        setVideos(result.items);
+        setTotal(result.total);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err);
+        setVideos([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [query]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => load(), [load]);
 
   const onRetry = async (video: Video): Promise<void> => {
     setBusyId(video.id);
     try {
       await videosApi.retry(video.id);
       toast.success(`Re-queued the download for “${video.title ?? video.id}”.`);
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -72,7 +83,7 @@ export default function Videos() {
       await videosApi.remove(deleteTarget.id);
       toast.success(`Deleted “${deleteTarget.title ?? deleteTarget.id}” and its transcripts.`);
       setDeleteTarget(null);
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -94,36 +105,36 @@ export default function Videos() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl font-semibold tracking-tight text-fg">Video library</h2>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+        <div className="shrink-0">
+          <h2 className="font-display text-2xl font-bold tracking-tight text-fg">Video library</h2>
           <p className="mt-0.5 text-sm text-dim">{summary}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void load()} className={btnNeutral}>
-            Refresh
-          </button>
-          <button type="button" onClick={() => setAddOpen(true)} className={btnPrimary}>
-            Add video
-          </button>
-        </div>
-      </div>
 
-      <div className="card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label htmlFor="video-search" className={labelCls}>
-            Search
-          </label>
+        <div className="relative mx-auto w-full max-w-md">
+          <SearchIcon size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <input
             id="video-search"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Title or source URL"
-            className={inputCls}
+            aria-label="Search videos"
+            className={`${inputCls} rounded-full py-2 pl-9`}
           />
         </div>
 
+        <div className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={() => void load()} className={`${btnNeutral} rounded-full`}>
+            Refresh
+          </button>
+          <button type="button" onClick={() => setAddOpen(true)} className={`${btnPrimary} rounded-full`}>
+            Add video
+          </button>
+        </div>
+      </div>
+
+      <div className="card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <label htmlFor="video-status" className={labelCls}>
             Status
