@@ -28,6 +28,18 @@ async function copyText(text: string): Promise<void> {
 
 const ROLES: FolderRole[] = ['viewer', 'commenter', 'editor'];
 
+/**
+ * Where a share link opens. The API returns the URL against the portal origin,
+ * which is the same origin in the deployed stack; in the split dev setup the
+ * console and portal are on different ports, and a link built from the
+ * console's own origin would point at a `/share` route it does not have.
+ */
+function shareUrl(token: string): string {
+  const configured = import.meta.env.VITE_PORTAL_URL as string | undefined;
+  const base = configured?.replace(/\/+$/, '') || window.location.origin;
+  return `${base}/share/${token}`;
+}
+
 export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
   const [tab, setTab] = useState<'people' | 'link'>('people');
   const [members, setMembers] = useState<FolderMember[]>([]);
@@ -346,8 +358,7 @@ export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
                       <button
                         type="button"
                         onClick={async () => {
-                          const url = `${window.location.origin}/share/${link.token}`;
-                          await copyText(url);
+                          await copyText(shareUrl(link.token));
                         }}
                         className="icon-btn"
                         aria-label="Copy link"
