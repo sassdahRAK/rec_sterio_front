@@ -1,3 +1,5 @@
+import { btnNeutral } from './ui';
+
 interface PaginationProps {
   page: number;
   pageSize: number;
@@ -35,7 +37,7 @@ export default function Pagination({
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="rounded border border-line bg-raised px-1.5 py-1 text-xs text-dim outline-none focus:border-accent"
+              className="tap-pad rounded border border-line bg-raised px-1.5 py-1 text-xs text-dim outline-none focus:border-accent"
               aria-label="Rows per page"
             >
               {pageSizes.map((size) => (
@@ -52,7 +54,7 @@ export default function Pagination({
             type="button"
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="btn-neutral px-2 py-1 text-xs"
+            className={`${btnNeutral} px-2 py-1 text-xs`}
             aria-label="Previous page"
           >
             ‹
@@ -64,7 +66,7 @@ export default function Pagination({
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={page >= pageCount}
-            className="btn-neutral px-2 py-1 text-xs"
+            className={`${btnNeutral} px-2 py-1 text-xs`}
             aria-label="Next page"
           >
             ›

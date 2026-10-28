@@ -57,7 +57,7 @@ export default function VideoTable({ videos, loading, onView, onRetry, onDelete,
               <td className={tableCellCls}>
                 <Link
                   to={`/videos/${video.id}`}
-                  className="block max-w-[12rem] truncate font-medium text-fg hover:text-accent"
+                  className="tap-pad block max-w-[12rem] truncate font-medium text-fg hover:text-accent"
                   title={video.title ?? video.source_url}
                 >
                   {video.title ?? <span className="text-faint italic">Untitled video</span>}

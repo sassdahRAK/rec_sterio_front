@@ -41,7 +41,7 @@ export default function FolderRail({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className={`mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+          className={`tap-pad mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
             selectedId === null ? 'bg-accent-soft text-fg' : 'text-dim hover:bg-raised hover:text-fg'
           }`}
         >
@@ -65,7 +65,7 @@ export default function FolderRail({
                   type="button"
                   onClick={() => onSelect(folder)}
                   style={{ paddingLeft: `${10 + depth * 14}px` }}
-                  className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm transition-colors ${
+                  className={`tap-pad flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm transition-colors ${
                     active ? 'bg-accent-soft text-fg' : 'text-dim hover:bg-raised hover:text-fg'
                   }`}
                 >

@@ -123,13 +123,11 @@ export default function Jobs() {
   return (
     <div className="mx-auto max-w-[96rem] space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
-        <div className="shrink-0">
+        <div>
           <h2 className="font-display text-2xl font-bold tracking-tight text-fg">Job queue</h2>
           <p className="mt-0.5 text-sm text-dim">
             {loading ? 'Loading…' : `${total} job${total === 1 ? '' : 's'} matching the current filters`}
-            {lastUpdated ? (
-              <span className="ml-2 font-mono text-2xs text-faint">updated {lastUpdated.toLocaleTimeString()}</span>
-            ) : null}
+            {lastUpdated ? <UpdatedAt value={lastUpdated} /> : null}
           </p>
         </div>
 
@@ -238,5 +236,31 @@ export default function Jobs() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * The "updated HH:MM:SS" stamp. On desk widths it sits inline permanently;
+ * on phones it peeks for 3s after each refresh (the queue polls every 5s, so
+ * it flashes briefly then hands the header back to the count — no wrap, no
+ * clutter).
+ */
+function UpdatedAt({ value }: { value: Date }) {
+  const [visible, setVisible] = useState(true);
+  const text = value.toLocaleTimeString();
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 640px)').matches) {
+      setVisible(true);
+      return;
+    }
+    setVisible(true);
+    const timer = setTimeout(() => setVisible(false), 3000);
+    return () => clearTimeout(timer);
+  }, [text]);
+  if (!visible) return null;
+  return (
+    <span className="ml-2 inline-block animate-fade-up font-mono text-2xs text-faint">
+      updated {text}
+    </span>
   );
 }

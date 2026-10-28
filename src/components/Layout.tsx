@@ -76,7 +76,7 @@ export default function Layout() {
               key={tab.to}
               to={tab.to}
               className={({ isActive }) =>
-                `flex-1 rounded-full px-3 py-1.5 text-center text-sm ${
+                `tap-pad flex flex-1 items-center justify-center rounded-full px-3 py-1.5 text-center text-sm ${
                   isActive ? 'bg-card font-semibold text-fg shadow-panel dark:bg-raised' : 'font-medium text-dim'
                 }`
               }

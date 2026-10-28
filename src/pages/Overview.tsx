@@ -131,7 +131,7 @@ export default function Overview() {
         <section className="card p-4 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-display text-sm font-semibold text-fg">Video pipeline</h3>
-            <Link to="/videos" className="text-xs text-accent hover:underline">
+            <Link to="/videos" className="tap-pad inline-flex items-center text-xs text-accent hover:underline">
               Open library
             </Link>
           </div>
@@ -194,7 +194,7 @@ export default function Overview() {
       <section className="card">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <h3 className="font-display text-sm font-semibold text-fg">Recent failures</h3>
-          <Link to="/jobs" className="text-xs text-accent hover:underline">
+          <Link to="/jobs" className="tap-pad inline-flex items-center text-xs text-accent hover:underline">
             Open job queue
           </Link>
         </div>

@@ -154,7 +154,7 @@ function AudioPane({ card }: { card: DataCardModel }) {
           onClick={() => void toggle()}
           disabled={!card.audio_available || loading}
           aria-label={playing ? 'Pause audio' : 'Play audio'}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-card text-fg transition hover:border-accent/50 disabled:opacity-40"
+          className="tap-pad flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-card text-fg transition hover:border-accent/50 disabled:opacity-40"
         >
           {loading ? (
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-accent" />
@@ -302,9 +302,12 @@ function TranscriptPane({
 }
 
 export default function DataCard({ card, editable = false, onEdit, onDelete, index = 0 }: DataCardProps) {
+  // min-w-0 lets the grid track shrink below the card's min-content width —
+  // the truncated title is nowrap, so without it the card pushed ~120px of
+  // horizontal scroll at 360px (same bug the portal's DataCard had).
   return (
     <article
-      className="glow-card animate-fade-up p-4"
+      className="glow-card min-w-0 animate-fade-up p-4"
       style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}
     >
       <header className="mb-3 flex items-start justify-between gap-3">
@@ -329,7 +332,7 @@ export default function DataCard({ card, editable = false, onEdit, onDelete, ind
                   href={card.source_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="truncate text-accent hover:underline"
+                  className="tap-pad inline-flex items-center truncate text-accent hover:underline"
                 >
                   source
                 </a>

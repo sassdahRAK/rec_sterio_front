@@ -166,6 +166,16 @@
     @apply inline-flex h-8 w-8 items-center justify-center rounded-full border border-line bg-card text-dim transition-colors hover:border-line hover:bg-raised hover:text-fg disabled:cursor-not-allowed disabled:opacity-40;
   }
 
+  /* Touch devices get 44px tap targets without changing the desktop look. */
+  @media (pointer: coarse) {
+    .tap-pad,
+    .icon-btn,
+    .tab {
+      min-height: 2.75rem;
+      min-width: 2.75rem;
+    }
+  }
+
   .tab {
     @apply inline-flex items-center gap-1.5 border-b-2 border-transparent px-1 pb-2 text-sm font-medium text-faint transition-colors hover:text-fg;
   }
