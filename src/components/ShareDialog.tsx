@@ -28,18 +28,6 @@ async function copyText(text: string): Promise<void> {
 
 const ROLES: FolderRole[] = ['viewer', 'commenter', 'editor'];
 
-/**
- * Where a share link opens. The API returns the URL against the portal origin,
- * which is the same origin in the deployed stack; in the split dev setup the
- * console and portal are on different ports, and a link built from the
- * console's own origin would point at a `/share` route it does not have.
- */
-function shareUrl(token: string): string {
-  const configured = import.meta.env.VITE_PORTAL_URL as string | undefined;
-  const base = configured?.replace(/\/+$/, '') || window.location.origin;
-  return `${base}/share/${token}`;
-}
-
 export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
   const [tab, setTab] = useState<'people' | 'link'>('people');
   const [members, setMembers] = useState<FolderMember[]>([]);
@@ -349,23 +337,11 @@ export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
                       {dead ? 'revoked' : link.role}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-mono text-2xs text-dim">
-                      /share/{link.token.slice(0, 10)}…
+                      link {link.id.slice(0, 8)}…
                     </span>
                     <span className="text-2xs text-faint">
                       {link.expires_at ? `expires ${formatDateTime(link.expires_at)}` : 'never expires'}
                     </span>
-                    {!dead ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await copyText(shareUrl(link.token));
-                        }}
-                        className="icon-btn"
-                        aria-label="Copy link"
-                      >
-                        <CopyIcon size={13} />
-                      </button>
-                    ) : null}
                     {!dead ? (
                       <button
                         type="button"
@@ -384,6 +360,9 @@ export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
               })
             )}
           </div>
+          <p className="text-2xs text-faint">
+            A link is shown in full only when it is created. If you lose it, revoke it and create a new one.
+          </p>
           <p className="text-2xs text-faint">
             Tip: a private folder can also be opened with a passcode — use the key button on the folder.
           </p>
