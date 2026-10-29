@@ -37,7 +37,7 @@ export default function Toast() {
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="Dismiss notification"
-                className="rounded p-1 text-faint transition hover:text-fg"
+                className="tap-pad rounded p-1 text-faint transition hover:text-fg"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />

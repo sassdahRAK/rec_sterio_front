@@ -310,7 +310,7 @@ export default function VideoDetailPage() {
   return (
     <div className="mx-auto max-w-[96rem] space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
-        <div className="min-w-0 shrink-0">
+        <div className="min-w-0">
           <Link to="/videos" className="text-xs text-faint transition hover:text-accent">
             ← Video library
           </Link>

@@ -19,7 +19,7 @@ import MoveFolderDialog from '../components/MoveFolderDialog';
 import Pagination from '../components/Pagination';
 import PasscodeDialog from '../components/PasscodeDialog';
 import ShareDialog from '../components/ShareDialog';
-import { btnNeutral, btnPrimary, inputCls } from '../components/ui';
+import { btnNeutral, btnPrimary, inputCls, selectCls } from '../components/ui';
 import {
   DownloadIcon,
   KeyIcon,
@@ -37,6 +37,29 @@ const PAGE_SIZE = 20;
 
 function flatten(items: Folder[]): Folder[] {
   return items.flatMap((folder) => [folder, ...flatten(folder.children ?? [])]);
+}
+
+/** One row of the phone folder picker: the folder id, its depth, and full path. */
+interface FolderOption {
+  id: string;
+  depth: number;
+  /** Names from the root down to this folder, inclusive. */
+  path: string[];
+}
+
+/**
+ * Folder tree flattened for the phone picker, carrying depth (rendered as
+ * indentation) and the parent path (rendered as the label). Kept separate from
+ * `flatten` so the rail's own behaviour is untouched.
+ */
+function flattenWithDepth(items: Folder[], depth = 0, parents: string[] = []): FolderOption[] {
+  return items.flatMap((folder) => {
+    const path = [...parents, folder.name];
+    return [
+      { id: folder.id, depth, path },
+      ...flattenWithDepth(folder.children ?? [], depth + 1, path),
+    ];
+  });
 }
 
 export default function Dataset() {
@@ -71,6 +94,7 @@ export default function Dataset() {
   const [moving, setMoving] = useState(false);
 
   const allFolders = useMemo(() => flatten(folders), [folders]);
+  const folderOptions = useMemo(() => flattenWithDepth(folders), [folders]);
   const selectedFolder = useMemo(
     () => allFolders.find((folder) => folder.id === folderId) ?? null,
     [allFolders, folderId],
@@ -296,8 +320,8 @@ export default function Dataset() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="shrink-0">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Dataset</h1>
-          <p className="mt-0.5 text-sm text-dim">
+          <h1 className="break-words font-display text-2xl font-bold tracking-tight text-fg">Dataset</h1>
+          <p className="mt-0.5 break-words text-sm text-dim">
             {selectedFolder ? selectedFolder.name : 'Every recording you can see'} ·{' '}
             {loading ? 'loading…' : `${total} unit${total === 1 ? '' : 's'}`}
           </p>
@@ -350,16 +374,44 @@ export default function Dataset() {
 
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-[4.6rem] lg:self-start">
-          <FolderRail
-            folders={folders}
-            selectedId={folderId}
-            onSelect={(folder) => {
-              setPage(1);
-              navigate(folder ? `/dataset/f/${folder.id}` : '/dataset');
-            }}
-            allCount={undefined}
-            onMove={isAuthenticated ? moveFolderTo : undefined}
-          />
+          {/* Phones get the whole tree as one picker — the expanded rail pushed
+              a screen's worth of links above the first unit. The rail itself
+              stays the sm: and up view. */}
+          <div className="card p-2 sm:hidden">
+            <label htmlFor="folder-picker" className="sr-only">
+              Browse folders
+            </label>
+            <select
+              id="folder-picker"
+              value={folderId ?? ''}
+              onChange={(event) => {
+                setPage(1);
+                navigate(event.target.value ? `/dataset/f/${event.target.value}` : '/dataset');
+              }}
+              className={selectCls}
+            >
+              <option value="">All units</option>
+              {folderOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {'\u00A0\u00A0'.repeat(option.depth)}
+                  {option.path.join(' · ')}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="hidden sm:block">
+            <FolderRail
+              folders={folders}
+              selectedId={folderId}
+              onSelect={(folder) => {
+                setPage(1);
+                navigate(folder ? `/dataset/f/${folder.id}` : '/dataset');
+              }}
+              allCount={undefined}
+              onMove={isAuthenticated ? moveFolderTo : undefined}
+            />
+          </div>
 
           {selectedFolder ? (
             <div className="card mt-3 space-y-1.5 p-2">
@@ -371,35 +423,35 @@ export default function Dataset() {
                   <button
                     type="button"
                     onClick={() => setShareFolder(selectedFolder)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
+                    className="tap-pad flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
                   >
                     <ShareIcon size={13} /> Share & invite
                   </button>
                   <button
                     type="button"
                     onClick={() => setPasscodeFolder(selectedFolder)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
+                    className="tap-pad flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
                   >
                     <KeyIcon size={13} /> Passcodes
                   </button>
                   <button
                     type="button"
                     onClick={() => setFolderDialog({ open: true, parentId: selectedFolder.id })}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
+                    className="tap-pad flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
                   >
                     <PlusIcon size={13} /> Sub-folder
                   </button>
                   <button
                     type="button"
                     onClick={() => setMoveFolder(selectedFolder)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
+                    className="tap-pad flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
                   >
                     <MoveIcon size={13} /> Move to…
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteFolder(selectedFolder)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-bad hover:bg-bad-soft"
+                    className="tap-pad flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-bad hover:bg-bad-soft"
                   >
                     <TrashIcon size={13} /> Delete folder
                   </button>
@@ -409,7 +461,7 @@ export default function Dataset() {
                 type="button"
                 onClick={() => void downloadZip(selectedFolder)}
                 disabled={busy}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
+                className="tap-pad flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
               >
                 <DownloadIcon size={13} /> Download ZIP
               </button>

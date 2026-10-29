@@ -91,7 +91,7 @@ export default function Overview() {
     <div className="mx-auto max-w-[96rem] space-y-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="shrink-0">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-fg">Pipeline overview</h2>
+          <h2 className="break-words font-display text-2xl font-bold tracking-tight text-fg">Pipeline overview</h2>
           <p className="mt-0.5 text-sm text-dim">
             Live counters from <span className="font-mono text-xs text-faint">GET /api/v1/stats</span>
           </p>

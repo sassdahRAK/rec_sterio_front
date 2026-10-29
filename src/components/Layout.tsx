@@ -1,29 +1,13 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { isMockEnabled } from '../api/client';
-import type { Role } from '../api/types';
-import { OPERATOR_ROLES, SUPER_ADMIN_ONLY } from '../api/types';
 import { useAuthStore } from '../store/auth';
+import BottomNav from './BottomNav';
 import ConfirmDialog from './ConfirmDialog';
 import ThemeToggle from './ThemeToggle';
 import Toast from './Toast';
 import { LogoutIcon } from './icons';
-
-interface Tab {
-  to: string;
-  label: string;
-  /** When set, the tab only shows for these roles (the capability matrix). */
-  roles?: Role[];
-}
-
-const TABS: Tab[] = [
-  { to: '/overview', label: 'Overview', roles: OPERATOR_ROLES },
-  { to: '/videos', label: 'Videos' },
-  { to: '/dataset', label: 'Dataset' },
-  { to: '/jobs', label: 'Jobs', roles: OPERATOR_ROLES },
-  { to: '/users', label: 'Users', roles: SUPER_ADMIN_ONLY },
-  { to: '/settings', label: 'Settings' },
-];
+import { visibleTabsFor } from './navItems';
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-3.5 py-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
@@ -39,8 +23,8 @@ export default function Layout() {
   const logout = useAuthStore((s) => s.logout);
   const [signOutOpen, setSignOutOpen] = useState(false);
 
-  // One filtered list feeds both nav bars; a role without a tab never sees it.
-  const visibleTabs = TABS.filter((tab) => !tab.roles || tab.roles.includes(role));
+  // One filtered list feeds every nav bar; a role without a tab never sees it.
+  const visibleTabs = visibleTabsFor(role);
 
   return (
     <div className="min-h-screen bg-base text-fg">
@@ -82,9 +66,10 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Tabs repeat below the fold line on small screens. */}
+        {/* Tabs repeat below the fold line between 640 and 767px; below that
+            the floating BottomNav dock takes over. */}
         <nav
-          className="mt-2 flex items-center gap-1 rounded-full border border-line bg-raised p-1 dark:bg-black/25 md:hidden"
+          className="mt-2 hidden items-center gap-1 rounded-full border border-line bg-raised p-1 sm:flex md:hidden dark:bg-black/25"
           aria-label="Primary"
         >
           {visibleTabs.map((tab) => (
@@ -103,9 +88,12 @@ export default function Layout() {
         </nav>
       </header>
 
-      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6">
+      {/* pb clears the floating bottom dock on phones; removed at sm+. */}
+      <main className="min-w-0 flex-1 px-4 pt-5 pb-24 sm:px-6 sm:pb-0">
         <Outlet />
       </main>
+
+      <BottomNav />
 
       <ConfirmDialog
         open={signOutOpen}

@@ -315,11 +315,19 @@ export default function Settings() {
                       >
                         {driveBusy === p.key ? 'Working…' : 'Disconnect'}
                       </button>
-                    ) : offered === false ? (
-                      <span className="text-xs text-faint">Not configured</span>
+                    ) : offered === false || offered === undefined ? (
+                      <span
+                        className="text-xs text-faint cursor-default"
+                        title={`Set ${p.key === 'google' ? 'GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET' : 'ONEDRIVE_CLIENT_ID + ONEDRIVE_CLIENT_SECRET'} in backend .env and restart`}
+                      >
+                        Not configured on server
+                      </span>
                     ) : !url ? (
-                      <span className="text-xs text-faint">
-                        Set VITE_{p.key.toUpperCase()}_CLIENT_ID to enable
+                      <span
+                        className="text-xs text-faint cursor-default"
+                        title={`Add VITE_${p.key === 'google' ? 'GOOGLE' : 'ONEDRIVE'}_CLIENT_ID to admin/.env and rebuild`}
+                      >
+                        Missing client ID (see tooltip)
                       </span>
                     ) : (
                       <a href={url} className={`${btnPrimary} rounded-md`}>

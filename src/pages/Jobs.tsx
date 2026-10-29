@@ -124,7 +124,7 @@ export default function Jobs() {
     <div className="mx-auto max-w-[96rem] space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight text-fg">Job queue</h2>
+          <h2 className="break-words font-display text-2xl font-bold tracking-tight text-fg">Job queue</h2>
           <p className="mt-0.5 text-sm text-dim">
             {loading ? 'Loading…' : `${total} job${total === 1 ? '' : 's'} matching the current filters`}
             {lastUpdated ? <UpdatedAt value={lastUpdated} /> : null}
@@ -202,7 +202,7 @@ export default function Jobs() {
           </select>
         </div>
 
-        <div className="flex items-end">
+        <div className="flex flex-wrap items-end gap-2">
           <button
             type="button"
             className={btnPrimary}

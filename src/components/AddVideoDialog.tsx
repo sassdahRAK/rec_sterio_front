@@ -147,7 +147,7 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded p-1 text-faint hover:text-fg disabled:opacity-40"
+            className="tap-pad rounded p-1 text-faint hover:text-fg disabled:opacity-40"
             aria-label="Close"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -259,7 +259,7 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
           ) : null}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3">
           <button type="button" className={btnNeutral} onClick={onClose} disabled={busy}>
             Cancel
           </button>

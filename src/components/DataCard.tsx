@@ -374,7 +374,7 @@ function TranscriptPane({
                 <button
                   type="button"
                   onClick={() => setExpanded((v) => !v)}
-                  className="mt-1 rounded text-2xs font-semibold uppercase tracking-wider text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                  className="tap-pad mt-1 rounded text-2xs font-semibold uppercase tracking-wider text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 >
                   {expanded ? 'Show less' : 'Show more'}
                 </button>

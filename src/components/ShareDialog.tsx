@@ -207,8 +207,8 @@ export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-line">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[32rem] text-left text-sm">
               <thead className="bg-raised/70 text-2xs uppercase tracking-wider text-faint">
                 <tr>
                   <th className="px-3 py-2 font-semibold">Person</th>
