@@ -9,6 +9,7 @@ import FileVideoDialog, { type FileTarget } from '../components/FileVideoDialog'
 import Pagination, { ALL_ROWS } from '../components/Pagination';
 import VideoTable from '../components/VideoTable';
 import { ADMIN_TIER, OPERATOR_ROLES, PLATFORMS, VIDEO_STATUSES } from '../api/types';
+import { videoStatusLabel } from '../lib/statusLabels';
 import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
 import { btnNeutral, btnPrimary, inputCls, labelCls, selectCls } from '../components/ui';
@@ -189,7 +190,7 @@ export default function Videos() {
             <option value="">All statuses</option>
             {VIDEO_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {videoStatusLabel(status)}
               </option>
             ))}
           </select>

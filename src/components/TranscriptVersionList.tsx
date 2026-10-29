@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Transcript } from '../api/types';
 import { formatDateTime, formatRelative, wordCount } from '../lib/format';
+import { transcriptStatusLabel } from '../lib/statusLabels';
 import EmptyState from './EmptyState';
 import StatusBadge, { SourceBadge } from './StatusBadge';
 import { btnGhost } from './ui';
@@ -33,7 +34,7 @@ export default function TranscriptVersionList({ versions, currentId, onLoad }: T
             <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
               <span className="font-mono text-xs font-semibold text-fg">v{version.version}</span>
               <SourceBadge source={String(version.source)} />
-              <StatusBadge status={String(version.status)} />
+              <StatusBadge status={String(version.status)} label={transcriptStatusLabel(version.status)} />
               {isCurrent ? (
                 <span className="rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-accent">
                   current

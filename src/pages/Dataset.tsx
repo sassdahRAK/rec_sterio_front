@@ -367,7 +367,7 @@ export default function Dataset() {
             className={`tab ${tab === 'mine' ? 'tab-active' : ''} disabled:opacity-40`}
             title={isAuthenticated ? undefined : 'Sign in to see your folders'}
           >
-            My Folder
+            My folders
           </button>
         </div>
       </div>
@@ -514,11 +514,10 @@ export default function Dataset() {
           ) : (
             <>
               <div className="grid gap-4 md:grid-cols-2">
-                {visibleCards.map((card, index) => (
+                {visibleCards.map((card) => (
                   <DataCard
                     key={card.video_id}
                     card={card}
-                    index={index}
                     editable={cardEditable(card)}
                     deletable={cardDeletable(card)}
                     onEdit={setEditCard}

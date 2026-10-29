@@ -55,7 +55,6 @@ export interface Video {
   status: VideoStatus | string;
   progress: number;
   error: string | null;
-  local_path: string | null;
   file_size: number | null;
   duration_seconds: number | null;
   mime_type: string | null;

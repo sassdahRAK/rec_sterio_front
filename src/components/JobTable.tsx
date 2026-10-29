@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import type { Job } from '../api/types';
 import { formatDateTime, formatRelative } from '../lib/format';
+import { jobKindLabel, jobStatusLabel } from '../lib/statusLabels';
 import EmptyState from './EmptyState';
 import Spinner from './Spinner';
 import StatusBadge from './StatusBadge';
@@ -83,11 +84,11 @@ export default function JobTable({
               <Fragment key={job.id}>
                 <tr className="align-middle transition-colors hover:bg-raised/40">
                   <td className={tableCellCls}>
-                    <span className="font-mono text-xs font-medium text-fg">{job.kind}</span>
+                    <span className="text-xs font-medium text-fg">{jobKindLabel(job.kind)}</span>
                     <span className="mt-0.5 block font-mono text-2xs text-faint">prio {job.priority}</span>
                   </td>
                   <td className={tableCellCls}>
-                    <StatusBadge status={String(job.status)} />
+                    <StatusBadge status={String(job.status)} label={jobStatusLabel(job.status)} />
                   </td>
                   <td className={`${tableCellCls} whitespace-nowrap font-mono text-xs`}>
                     {job.attempts}/{job.max_attempts}

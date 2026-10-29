@@ -1,3 +1,5 @@
+import { sourceLabel } from '../lib/statusLabels';
+
 export type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'neutral' | 'violet';
 
 const toneClasses: Record<Tone, string> = {
@@ -89,13 +91,19 @@ const sourceTone: Record<string, Tone> = {
   merged: 'ok',
 };
 
+/**
+ * The provenance vocabulary lives in `lib/statusLabels` with every other label;
+ * re-exported so existing importers of this module keep working.
+ */
+export { sourceLabel };
+
 export function SourceBadge({ source, className = '' }: { source: string; className?: string }) {
   const tone = sourceTone[source] ?? 'neutral';
   return (
     <span
       className={`inline-flex items-center whitespace-nowrap rounded border px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide ${toneClasses[tone]} ${className}`}
     >
-      {source}
+      {sourceLabel(source)}
     </span>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Transcript } from '../api/types';
 import { wordCount } from '../lib/format';
+import { transcriptStatusLabel } from '../lib/statusLabels';
 import Spinner from './Spinner';
 import StatusBadge, { SourceBadge } from './StatusBadge';
 import { btnPrimary, btnNeutral, inputCls, labelCls } from './ui';
@@ -39,7 +40,7 @@ export default function TranscriptEditor({ transcript, nextVersion, saving, onSa
         {transcript ? (
           <>
             <SourceBadge source={String(transcript.source)} />
-            <StatusBadge status={String(transcript.status)} />
+            <StatusBadge status={String(transcript.status)} label={transcriptStatusLabel(transcript.status)} />
             <span className="font-mono text-2xs text-faint">v{transcript.version}</span>
           </>
         ) : (

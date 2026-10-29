@@ -6,15 +6,15 @@ import { visibleTabsFor } from './navItems';
  * Telegram-style bottom navigation for phones only (<sm). The header's pill
  * tab row covers 640-767px, and at <640 this floating bar replaces it.
  *
- * Items are a solid 22px glyph above a label (9px below 430px where the
- * 6-item admin set crowds a small phone, 10px otherwise); the active item is tinted
+ * Items are a solid 22px glyph above a label (10px below 430px where the
+ * 6-item admin set crowds a small phone, 11px otherwise); the active item is tinted
  * with the accent token (label included), matching how Telegram marks the
  * current tab — no per-item pill here, since the bar itself is the pill.
  * The item set is the same role-filtered TABS the header renders.
  */
 
 const ITEM_BASE =
-  'tap-pad flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1.5 text-[9px] leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 min-[430px]:text-[10px]';
+  'tap-pad flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1.5 text-[10px] leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 min-[430px]:text-[11px]';
 
 const itemClass = ({ isActive }: { isActive: boolean }) =>
   `${ITEM_BASE} ${isActive ? 'font-semibold text-accent' : 'font-medium text-dim hover:text-fg'}`;
@@ -25,7 +25,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      aria-label="Primary"
+      aria-label="Mobile sections"
       className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 sm:hidden"
     >
       <div className="mx-auto flex max-w-md items-stretch gap-1 rounded-full border border-line bg-card/90 px-1.5 py-0.5 shadow-panel backdrop-blur">

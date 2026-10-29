@@ -45,8 +45,11 @@ export default function Layout() {
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0">
             {isMockEnabled() ? (
-              <span className="hidden rounded-full border border-warn/40 bg-warn-soft px-2.5 py-0.5 text-2xs font-semibold uppercase tracking-wider text-warn sm:inline">
-                demo data
+              <span
+                className="rounded-full border border-warn/40 bg-warn-soft px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-warn sm:px-2.5"
+                title="Demo data — nothing here is saved to a server"
+              >
+                demo<span className="hidden sm:inline"> data</span>
               </span>
             ) : null}
             {email ? (
@@ -70,7 +73,7 @@ export default function Layout() {
             the floating BottomNav dock takes over. */}
         <nav
           className="mt-2 hidden items-center gap-1 rounded-full border border-line bg-raised p-1 sm:flex md:hidden dark:bg-black/25"
-          aria-label="Primary"
+          aria-label="Sections"
         >
           {visibleTabs.map((tab) => (
             <NavLink

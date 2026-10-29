@@ -14,6 +14,7 @@ import TranscriptVersionList from '../components/TranscriptVersionList';
 import VideoPlayer from '../components/VideoPlayer';
 import { btnDanger, btnNeutral, btnPrimary, selectCls } from '../components/ui';
 import { formatBytes, formatDateTime, formatDuration, formatRelative, shortId } from '../lib/format';
+import { jobKindLabel, videoStatusLabel } from '../lib/statusLabels';
 import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
 
@@ -44,7 +45,7 @@ function StageRail({ status, progress }: { status: string; progress: number }) {
               }`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-              {stage}
+              {videoStatusLabel(stage)}
             </span>
             {index < pipelineStages.length - 1 ? <span className="text-faint">→</span> : null}
           </li>
@@ -55,7 +56,7 @@ function StageRail({ status, progress }: { status: string; progress: number }) {
       ) : null}
       {failed ? (
         <li className="ml-2">
-          <StatusBadge status={status} />
+          <StatusBadge status={status} label={videoStatusLabel(status)} />
         </li>
       ) : null}
     </ol>
@@ -267,7 +268,7 @@ export default function VideoDetailPage() {
   const onRetryJob = async (job: Job): Promise<void> => {
     try {
       await jobsApi.retry(job.id);
-      toast.success(`Job ${job.kind} re-queued.`);
+      toast.success(`${jobKindLabel(job.kind)} job re-queued.`);
       await load();
     } catch (err) {
       const apiError = err as ApiError;
@@ -316,7 +317,7 @@ export default function VideoDetailPage() {
           </Link>
           <h2 className="mt-1 max-w-[34rem] truncate font-display text-2xl font-bold tracking-tight text-fg">{videoTitle}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <StatusBadge status={String(detail.status)} />
+            <StatusBadge status={String(detail.status)} label={videoStatusLabel(detail.status)} />
             <PlatformBadge platform={String(detail.platform)} />
             <span className="font-mono text-2xs text-faint">id {shortId(detail.id)}</span>
             <span className="font-mono text-2xs text-faint">by {detail.created_by_display ?? detail.created_by}</span>
@@ -335,9 +336,9 @@ export default function VideoDetailPage() {
                 onChange={(e) => setEngine(e.target.value as TranscriptEngine)}
                 className={`${selectCls} w-32 rounded-full`}
               >
-                <option value="both">both</option>
-                <option value="whisper">whisper</option>
-                <option value="gemini">gemini</option>
+                <option value="both">Both engines</option>
+                <option value="whisper">Whisper only</option>
+                <option value="gemini">Gemini only</option>
               </select>
               <button type="button" onClick={() => void onGenerate()} disabled={generating || polling} className={`${btnPrimary} rounded-full`}>
                 {generating || polling ? <Spinner className="h-3.5 w-3.5" /> : null}
@@ -412,7 +413,6 @@ export default function VideoDetailPage() {
             <MetaRow label="sha256">
               <span className="break-all">{detail.checksum_sha256 ?? '—'}</span>
             </MetaRow>
-            <MetaRow label="Local path">{detail.local_path ?? '—'}</MetaRow>
             <MetaRow label="Created by">{detail.created_by_display ?? detail.created_by}</MetaRow>
             <MetaRow label="Created">{formatDateTime(detail.created_at)}</MetaRow>
             <MetaRow label="Updated">{formatRelative(detail.updated_at)}</MetaRow>

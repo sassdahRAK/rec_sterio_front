@@ -8,7 +8,9 @@ import { ApiError, mediaApi } from '../api/client';
 import type { DataCard as DataCardModel } from '../api/types';
 import { formatDuration } from '../lib/format';
 import { claimPlayback, releasePlayback } from '../lib/playback';
+import { badgeLabel, videoStatusLabel } from '../lib/statusLabels';
 import { toast } from '../store/toast';
+import Spinner from './Spinner';
 import {
   DownloadIcon,
   FolderIcon,
@@ -37,7 +39,6 @@ interface DataCardProps {
    * point of a fork — it only needs read access to this card.
    */
   onFile?: (card: DataCardModel) => void;
-  index?: number;
 }
 
 /** Loads protected media through the API client, then plays it from a blob. */
@@ -133,15 +134,11 @@ function VideoPane({ card }: { card: DataCardModel }) {
               <span className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgb(var(--c-accent)/0.22),transparent_65%)]" />
             )}
             <span className="relative flex h-14 w-14 items-center justify-center rounded-full border border-fg/15 bg-card/80 text-fg shadow-panel backdrop-blur transition group-hover:scale-105 group-disabled:opacity-60">
-              {loading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              ) : (
-                <PlayIcon size={22} />
-              )}
+              {loading ? <Spinner tone="inverse" className="h-4 w-4" /> : <PlayIcon size={22} />}
             </span>
             {!ready ? (
               <span className="absolute bottom-2 left-2 rounded-full bg-card/85 px-2 py-0.5 text-2xs uppercase tracking-wider text-dim ring-1 ring-line">
-                {driveOffline ? 'storage unavailable' : card.status}
+                {driveOffline ? 'storage unavailable' : videoStatusLabel(card.status)}
               </span>
             ) : null}
           </button>
@@ -224,7 +221,7 @@ function AudioPane({ card }: { card: DataCardModel }) {
           className="tap-pad flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-card text-fg transition hover:border-accent/50 disabled:opacity-40"
         >
           {loading ? (
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-accent" />
+            <Spinner className="h-3.5 w-3.5" />
           ) : playing ? (
             <PauseIcon size={13} />
           ) : (
@@ -351,7 +348,7 @@ function TranscriptPane({
               : 'border-bad/40 bg-rose-soft text-bad'
           }`}
         >
-          {card.badge === 'cleaned' ? 'Cleaned' : 'Raw'}
+          {badgeLabel(card.badge)}
         </span>
       </div>
 
@@ -364,7 +361,7 @@ function TranscriptPane({
             <div className="min-w-0 flex-1">
               <p
                 ref={textRef}
-                className={`text-sm leading-relaxed text-fg${expanded ? '' : ' line-clamp-5'}`}
+                className={`whitespace-pre-wrap text-sm leading-relaxed text-fg${expanded ? '' : ' line-clamp-5'}`}
                 style={{ overflowWrap: 'anywhere' }}
                 title={expanded ? undefined : text}
               >
@@ -398,8 +395,8 @@ function TranscriptPane({
                     <PencilIcon size={13} />
                   </button>
                 ) : null}
-                <span className="ml-auto font-mono text-2xs uppercase tracking-wider text-faint">
-                  {card.status === 'transcribed' ? 'ready' : card.status}
+                <span className="ml-auto text-2xs uppercase tracking-wider text-faint">
+                  {videoStatusLabel(card.status)}
                 </span>
               </div>
             </div>
@@ -429,17 +426,13 @@ export default function DataCard({
   onEdit,
   onDelete,
   onFile,
-  index = 0,
 }: DataCardProps) {
   const canDelete = deletable ?? editable;
   // min-w-0 lets the grid track shrink below the card's min-content width —
   // the truncated title is nowrap, so without it the card pushed ~120px of
   // horizontal scroll at 360px (same bug the portal's DataCard had).
   return (
-    <article
-      className="glow-card min-w-0 animate-fade-up p-4"
-      style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}
-    >
+    <article className="glow-card min-w-0 p-4">
       <header className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate font-display text-sm font-semibold text-fg">

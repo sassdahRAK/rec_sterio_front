@@ -1,5 +1,6 @@
 import type { DiffSegment, Merge } from '../api/types';
 import { formatRelative } from '../lib/format';
+import { transcriptStatusLabel } from '../lib/statusLabels';
 import EmptyState from './EmptyState';
 import Spinner from './Spinner';
 import StatusBadge from './StatusBadge';
@@ -77,7 +78,7 @@ export default function MergeDiff({
     <div className="card">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <h3 className="font-display text-sm font-semibold text-fg">Merge diff</h3>
-        <StatusBadge status={String(merge.status)} />
+        <StatusBadge status={String(merge.status)} label={transcriptStatusLabel(merge.status)} />
         {merge.model ? <span className="font-mono text-2xs text-faint">{merge.model}</span> : null}
         <span className="text-2xs text-faint">created {formatRelative(merge.created_at)}</span>
         <div className="ml-auto flex items-center gap-2">

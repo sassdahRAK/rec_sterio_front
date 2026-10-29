@@ -6,6 +6,7 @@ import ErrorState from '../components/ErrorState';
 import JobTable from '../components/JobTable';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
+import { jobKindLabel, jobStatusLabel } from '../lib/statusLabels';
 import { toast } from '../store/toast';
 import { btnNeutral, btnPrimary, labelCls, selectCls } from '../components/ui';
 
@@ -91,7 +92,7 @@ export default function Jobs() {
     setBusyId(job.id);
     try {
       await jobsApi.retry(job.id);
-      toast.success(`Job ${job.kind} re-queued with a fresh attempt budget.`);
+      toast.success(`${jobKindLabel(job.kind)} job re-queued with a fresh attempt budget.`);
       load(true);
     } catch (err) {
       const apiError = err as ApiError;
@@ -105,7 +106,7 @@ export default function Jobs() {
     setBusyId(job.id);
     try {
       await jobsApi.cancel(job.id);
-      toast.info(`Job ${job.kind} cancelled.`);
+      toast.info(`${jobKindLabel(job.kind)} job cancelled.`);
       load(true);
     } catch (err) {
       const apiError = err as ApiError;
@@ -162,7 +163,7 @@ export default function Jobs() {
             <option value="">All statuses</option>
             {JOB_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {jobStatusLabel(status)}
               </option>
             ))}
           </select>
@@ -181,7 +182,7 @@ export default function Jobs() {
             <option value="">All kinds</option>
             {JOB_KINDS.map((kind) => (
               <option key={kind} value={kind}>
-                {kind}
+                {jobKindLabel(kind)}
               </option>
             ))}
           </select>

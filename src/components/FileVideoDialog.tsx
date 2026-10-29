@@ -116,7 +116,7 @@ export default function FileVideoDialog({
   return (
     <Modal
       open
-      title={mode === 'move' ? 'Move to a folder' : 'Copy to my folder'}
+      title={mode === 'move' ? 'Move to a folder' : 'Copy to a folder'}
       description={target.title ?? target.video_id}
       onClose={onClose}
       busy={busy}

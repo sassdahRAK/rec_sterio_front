@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Video } from '../api/types';
 import { formatBytes, formatDuration, formatRelative } from '../lib/format';
+import { videoStatusLabel } from '../lib/statusLabels';
 import EmptyState from './EmptyState';
 import Spinner from './Spinner';
 import StatusBadge, { PlatformBadge } from './StatusBadge';
@@ -113,7 +114,7 @@ export default function VideoTable({
                 <PlatformBadge platform={String(video.platform)} />
               </td>
               <td className={tableCellCls}>
-                <StatusBadge status={String(video.status)} />
+                <StatusBadge status={String(video.status)} label={videoStatusLabel(video.status)} />
               </td>
               <td className={tableCellCls}>
                 {video.status === 'downloading' || video.progress > 0 ? (

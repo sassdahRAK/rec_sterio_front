@@ -105,7 +105,7 @@ function cloudErrorMessage(err: unknown): string {
       return 'That authorization link was already used or has expired — start Connect again.';
     }
     if (err.code === 'provider_not_configured') {
-      return "This provider isn't configured on the server — check the backend .env.";
+      return "This storage provider isn't set up yet — ask your administrator to enable it.";
     }
     const details = Array.isArray(err.details)
       ? (err.details as { field?: string; issue?: string }[])
@@ -528,6 +528,12 @@ export default function Settings() {
           Keep your contributed video bytes on your own cloud. Connect a drive here, then choose it
           when uploading a clip — the file goes to your drive and the dataset catalogues it normally.
         </p>
+        {driveProviders && (!driveProviders.google || !driveProviders.onedrive) ? (
+          <div className="mb-4 rounded-md border border-line bg-raised px-3 py-2 text-xs text-dim">
+            <strong className="font-semibold text-fg">Drive storage isn't enabled yet.</strong>{' '}
+            Ask your administrator to enable cloud storage.
+          </div>
+        ) : null}
         {driveLoading && driveProviders === null ? (
           <div className="flex items-center gap-3 py-4">
             <Spinner className="h-4 w-4" />
@@ -567,8 +573,8 @@ export default function Settings() {
                       {!connected && offered === true && clientIdMissing ? (
                         <p className="mt-1 text-xs text-faint">
                           {p.key === 'google'
-                            ? 'Add VITE_GOOGLE_CLIENT_ID to admin/.env and rebuild to enable Connect.'
-                            : 'Add VITE_ONEDRIVE_CLIENT_ID to admin/.env and rebuild to enable Connect.'}
+                            ? 'Google Drive isn\'t set up yet — ask your administrator to finish enabling it.'
+                            : 'OneDrive isn\'t set up yet — ask your administrator to finish enabling it.'}
                         </p>
                       ) : null}
                     </div>
@@ -602,15 +608,20 @@ export default function Settings() {
                           </button>
                         </div>
                       ) : offered === false ? (
-                        <span
-                          className="text-xs text-faint cursor-default"
-                          title={`Set ${p.key === 'google' ? 'GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET' : 'ONEDRIVE_CLIENT_ID + ONEDRIVE_CLIENT_SECRET'} in backend .env and restart`}
+                        /* The next step is visible text, not only a hover title:
+                           a grey dead chip reads as "the feature is broken". */
+                        <div
+                          className="max-w-[16rem] text-right"
+                          title="Ask your administrator to enable this provider."
                         >
-                          Not configured on server
-                        </span>
+                          <p className="text-xs font-medium text-faint">This feature isn't set up yet</p>
+                          <p className="mt-0.5 text-2xs text-faint">
+                            Ask your administrator to configure it.
+                          </p>
+                        </div>
                       ) : driveProviders === null ? (
                         /* Still loading (or the status call failed): never flash
-                           "Not configured" for a provider we haven't heard about. */
+                           "isn't set up" for a provider we haven't heard about. */
                         <Spinner
                           label={driveLoading ? 'Checking…' : 'Unavailable'}
                           className="justify-end"
@@ -787,10 +798,7 @@ function PasteCodeDialog({
           >
             {busy ? (
               <>
-                <span
-                  className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-accent"
-                  aria-hidden="true"
-                />
+                <Spinner className="h-4 w-4" />
                 Working…
               </>
             ) : (

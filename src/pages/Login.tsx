@@ -333,7 +333,7 @@ export default function Login() {
                 onChange={(event) => setDemo(event.target.checked)}
                 className="h-3.5 w-3.5 rounded border-line bg-raised text-accent focus:ring-accent/40"
               />
-              Use demo data (mock API, no backend required)
+              Explore with demo data (no server needed)
             </label>
 
             {error ? (
@@ -350,8 +350,8 @@ export default function Login() {
           </form>
 
           <p className="mt-5 text-xs leading-relaxed text-faint">
-            Demo mode accepts any valid-looking email address and a password of four characters
-            or more.
+            Demo mode is a safe sandbox: any valid-looking email address works with a password of
+            four characters or more, and nothing is sent to a server.
           </p>
         </div>
       </main>

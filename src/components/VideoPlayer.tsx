@@ -94,7 +94,7 @@ export default function VideoPlayer({
             <p className="text-sm text-dim">Media preview unavailable</p>
             <p className="max-w-sm text-xs text-faint">
               {isMockEnabled()
-                ? 'Demo data has no media file attached — the player streams the real file with an Authorization header.'
+                ? 'Demo mode uses sample records without real media files, so there is nothing to play here. Sign in against the live server to preview actual recordings.'
                 : 'The file could not be streamed. It may not have been downloaded yet.'}
             </p>
           </div>
