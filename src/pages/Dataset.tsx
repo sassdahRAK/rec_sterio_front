@@ -7,12 +7,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, datasetApi, foldersApi, saveBlob, videosApi } from '../api/client';
 import type { DataCard as DataCardModel, Folder } from '../api/types';
+import { ADMIN_TIER, TRANSCRIPT_EDIT_ROLES } from '../api/types';
 import CardEditDialog from '../components/CardEditDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DataCard from '../components/DataCard';
 import ErrorState from '../components/ErrorState';
+import FileVideoDialog, { type FileTarget } from '../components/FileVideoDialog';
 import FolderDialog from '../components/FolderDialog';
 import FolderRail from '../components/FolderRail';
+import MoveFolderDialog from '../components/MoveFolderDialog';
 import Pagination from '../components/Pagination';
 import PasscodeDialog from '../components/PasscodeDialog';
 import ShareDialog from '../components/ShareDialog';
@@ -23,6 +26,7 @@ import {
   PencilIcon,
   PlusIcon,
   SearchIcon,
+  MoveIcon,
   ShareIcon,
   TrashIcon,
 } from '../components/icons';
@@ -60,8 +64,11 @@ export default function Dataset() {
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   const [passcodeFolder, setPasscodeFolder] = useState<Folder | null>(null);
   const [editCard, setEditCard] = useState<DataCardModel | null>(null);
+  const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   const [deleteCard, setDeleteCard] = useState<DataCardModel | null>(null);
   const [deleteFolder, setDeleteFolder] = useState<Folder | null>(null);
+  const [moveFolder, setMoveFolder] = useState<Folder | null>(null);
+  const [moving, setMoving] = useState(false);
 
   const allFolders = useMemo(() => flatten(folders), [folders]);
   const selectedFolder = useMemo(
@@ -74,7 +81,7 @@ export default function Dataset() {
     return map;
   }, [allFolders]);
 
-  const canPublish = role === 'admin';
+  const canPublish = ADMIN_TIER.includes(role);
   const canManageSelected = isAuthenticated && selectedFolder?.my_role === 'editor';
 
   useEffect(() => {
@@ -147,11 +154,54 @@ export default function Dataset() {
     });
   }, [cards, tab, email, allFolders]);
 
+  // Editing a card means editing/cleaning its transcript via the card dialog.
+  // The transcript-edit tier manages everything; a folder editor keeps its
+  // per-folder right; everyone else reads.
   const cardEditable = useCallback(
     (card: DataCardModel): boolean => {
       if (!isAuthenticated) return false;
-      if (role === 'admin') return true;
-      if (!card.folder_id) return true; // the API still enforces creator-or-editor
+      if (TRANSCRIPT_EDIT_ROLES.includes(role)) return true;
+      // An unfiled card has no folder role to inherit: only the admin tier may
+      // touch any of them. For everyone else `can_open` is the server's
+      // creator check — an unfiled video is openable only to whoever ingested
+      // it — so a non-admin sees edit solely on their own units. (The API
+      // still enforces creator-or-editor regardless.)
+      if (!card.folder_id) return ADMIN_TIER.includes(role) || card.can_open !== false;
+      return roleById.get(card.folder_id) === 'editor';
+    },
+    [isAuthenticated, role, roleById],
+  );
+
+  // Deleting a card is a destructive video op, which reviewers never get.
+  const cardDeletable = useCallback(
+    (card: DataCardModel): boolean => {
+      if (!isAuthenticated) return false;
+      if (ADMIN_TIER.includes(role)) return true;
+      // A reviewer curates transcripts, never the media. For an unfiled card
+      // the fallback below assumes "creator or folder editor" — which a
+      // reviewer is not — so the button would only ever produce a 403. Named
+      // via the role sets, the reviewer is exactly the transcript-edit tier
+      // outside ADMIN_TIER.
+      if (!ADMIN_TIER.includes(role) && TRANSCRIPT_EDIT_ROLES.includes(role)) return false;
+      // An unfiled card has no folder role to inherit: `can_open` is the
+      // server's creator check (see cardEditable), so a non-admin sees delete
+      // solely on their own units. (The API still enforces it regardless.)
+      if (!card.folder_id) return card.can_open !== false;
+      return roleById.get(card.folder_id) === 'editor';
+    },
+    [isAuthenticated, role, roleById],
+  );
+
+  // Move/copy is a filing action: it changes where a unit lives (or leaves a
+  // fork behind), so it follows the same rule as deleting — the admin tier and
+  // a folder's own editor. A reviewer curates transcript text only and must not
+  // see it; a plain user has no folder to file into yet.
+  const cardFileable = useCallback(
+    (card: DataCardModel): boolean => {
+      if (!isAuthenticated) return false;
+      if (ADMIN_TIER.includes(role)) return true;
+      if (TRANSCRIPT_EDIT_ROLES.includes(role)) return false; // reviewer
+      if (!card.folder_id) return card.can_open !== false;
       return roleById.get(card.folder_id) === 'editor';
     },
     [isAuthenticated, role, roleById],
@@ -207,6 +257,38 @@ export default function Dataset() {
     }
   };
 
+  /**
+   * Re-parent a folder: the target of both a drag-and-drop and the Move dialog.
+   * The server re-checks rights on both ends and refuses a cycle; the rail and
+   * dialog already hide those targets, so a failure here is a real error.
+   */
+  const moveFolderTo = async (folder: Folder, parentId: string | null): Promise<void> => {
+    if (folder.parent_id === parentId) {
+      setMoveFolder(null);
+      return;
+    }
+    setMoving(true);
+    try {
+      await foldersApi.update(folder.id, { parent_id: parentId });
+      const parent = parentId ? allFolders.find((f) => f.id === parentId) : null;
+      toast.success(
+        parent
+          ? `Moved “${folder.name}” into “${parent.name}”.`
+          : `Moved “${folder.name}” to the top level.`,
+      );
+      setMoveFolder(null);
+      load();
+    } catch (err) {
+      const apiError = err as ApiError;
+      toast.error(
+        apiError instanceof ApiError ? apiError.code : 'move_failed',
+        apiError instanceof ApiError ? apiError.message : 'Could not move that folder.',
+      );
+    } finally {
+      setMoving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
@@ -231,13 +313,15 @@ export default function Dataset() {
             className={`${inputCls} rounded-full py-2 pl-9`}
           />
         </div>
-        <button
-          type="button"
-          onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
-          className={`${btnPrimary} shrink-0 rounded-full`}
-        >
-          <PlusIcon size={14} /> New folder
-        </button>
+        {canPublish ? (
+          <button
+            type="button"
+            onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
+            className={`${btnPrimary} shrink-0 rounded-full`}
+          >
+            <PlusIcon size={14} /> New folder
+          </button>
+        ) : null}
       </div>
 
       <div className="border-b border-line pb-2">
@@ -271,6 +355,7 @@ export default function Dataset() {
               navigate(folder ? `/dataset/f/${folder.id}` : '/dataset');
             }}
             allCount={undefined}
+            onMove={isAuthenticated ? moveFolderTo : undefined}
           />
 
           {selectedFolder ? (
@@ -300,6 +385,13 @@ export default function Dataset() {
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
                   >
                     <PlusIcon size={13} /> Sub-folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMoveFolder(selectedFolder)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-dim hover:bg-raised hover:text-fg"
+                  >
+                    <MoveIcon size={13} /> Move to…
                   </button>
                   <button
                     type="button"
@@ -346,20 +438,22 @@ export default function Dataset() {
               </h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-dim">
                 {tab === 'mine'
-                  ? 'Create a folder, then file recordings into it from a card’s edit dialog.'
+                  ? 'Create a folder, then use the folder button on any card to move or copy a recording into it.'
                   : 'Add a recording from the video library, or open a folder that already has data.'}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button type="button" onClick={() => navigate('/videos')} className={btnPrimary}>
                   Open the video library
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
-                  className={btnNeutral}
-                >
-                  New folder
-                </button>
+                {canPublish ? (
+                  <button
+                    type="button"
+                    onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
+                    className={btnNeutral}
+                  >
+                    New folder
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -371,8 +465,19 @@ export default function Dataset() {
                     card={card}
                     index={index}
                     editable={cardEditable(card)}
+                    deletable={cardDeletable(card)}
                     onEdit={setEditCard}
                     onDelete={setDeleteCard}
+                    onFile={
+                      cardFileable(card)
+                        ? (target) =>
+                            setFileTarget({
+                              video_id: target.video_id,
+                              title: target.title,
+                              folder_id: target.folder_id,
+                            })
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -403,6 +508,25 @@ export default function Dataset() {
         onCreated={(folder) => {
           void loadFolders();
           navigate(`/dataset/f/${folder.id}`);
+        }}
+      />
+
+      <MoveFolderDialog
+        folder={moveFolder}
+        folders={folders}
+        busy={moving}
+        onClose={() => setMoveFolder(null)}
+        onMove={(folder, parentId) => void moveFolderTo(folder, parentId)}
+      />
+
+      <FileVideoDialog
+        target={fileTarget}
+        folders={folders}
+        defaultMode={fileTarget?.folder_id ? 'copy' : 'move'}
+        onClose={() => setFileTarget(null)}
+        onDone={(message) => {
+          toast.success(message);
+          void load();
         }}
       />
 

@@ -13,6 +13,10 @@ interface JobTableProps {
   onRetry?: (job: Job) => void;
   onCancel?: (job: Job) => void;
   busyId?: string | null;
+  /** Right to requeue jobs (the operator surface); hides Retry otherwise. */
+  canRetry?: boolean;
+  /** Right to cancel jobs (the operator surface); hides Cancel otherwise. */
+  canCancel?: boolean;
 }
 
 function jobDuration(job: Job): string {
@@ -27,7 +31,16 @@ function jobDuration(job: Job): string {
   return `${m}m ${s}s`;
 }
 
-export default function JobTable({ jobs, loading, videoTitles, onRetry, onCancel, busyId }: JobTableProps) {
+export default function JobTable({
+  jobs,
+  loading,
+  videoTitles,
+  onRetry,
+  onCancel,
+  busyId,
+  canRetry = false,
+  canCancel = false,
+}: JobTableProps) {
   if (loading && jobs.length === 0) {
     return (
       <div className="flex items-center justify-center gap-3 px-6 py-16">
@@ -94,24 +107,28 @@ export default function JobTable({ jobs, loading, videoTitles, onRetry, onCancel
                   <td className={`${tableCellCls} whitespace-nowrap font-mono text-xs`}>{jobDuration(job)}</td>
                   <td className={`${tableCellCls} sticky right-0 border-l border-line bg-card text-right`}>
                     <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onRetry?.(job)}
-                        disabled={!retryable || busyId === job.id}
-                        className={`${btnNeutral} px-2 py-1 text-xs`}
-                        title={retryable ? 'Requeue this job' : 'Only failed or dead jobs can be retried'}
-                      >
-                        Retry
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onCancel?.(job)}
-                        disabled={!cancellable || busyId === job.id}
-                        className={`${btnGhost} px-2 py-1 text-xs`}
-                        title={cancellable ? 'Cancel this job' : 'Only queued or running jobs can be cancelled'}
-                      >
-                        Cancel
-                      </button>
+                      {canRetry ? (
+                        <button
+                          type="button"
+                          onClick={() => onRetry?.(job)}
+                          disabled={!retryable || busyId === job.id}
+                          className={`${btnNeutral} px-2 py-1 text-xs`}
+                          title={retryable ? 'Requeue this job' : 'Only failed or dead jobs can be retried'}
+                        >
+                          Retry
+                        </button>
+                      ) : null}
+                      {canCancel && onCancel ? (
+                        <button
+                          type="button"
+                          onClick={() => onCancel(job)}
+                          disabled={!cancellable || busyId === job.id}
+                          className={`${btnGhost} px-2 py-1 text-xs`}
+                          title={cancellable ? 'Cancel this job' : 'Only queued or running jobs can be cancelled'}
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

@@ -1,19 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, videosApi } from '../api/client';
-import type { Video, VideoListQuery } from '../api/types';
+import { ApiError, foldersApi, videosApi } from '../api/client';
+import type { Folder, Video, VideoListQuery } from '../api/types';
 import AddVideoDialog from '../components/AddVideoDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorState from '../components/ErrorState';
-import Pagination from '../components/Pagination';
+import FileVideoDialog, { type FileTarget } from '../components/FileVideoDialog';
+import Pagination, { ALL_ROWS } from '../components/Pagination';
 import VideoTable from '../components/VideoTable';
-import { PLATFORMS, VIDEO_STATUSES } from '../api/types';
+import { ADMIN_TIER, OPERATOR_ROLES, PLATFORMS, VIDEO_STATUSES } from '../api/types';
+import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
 import { btnNeutral, btnPrimary, inputCls, labelCls, selectCls } from '../components/ui';
 import { SearchIcon } from '../components/icons';
 
 export default function Videos() {
   const navigate = useNavigate();
+  const role = useAuthStore((s) => s.role);
+  // Mirrors the server: re-enqueueing a download needs editor rights on the
+  // video, which only the admin tier always holds — a developer would just
+  // collect 403s here and still has the job-queue retry (an operator surface).
+  // Filing and deleting are folder/content management, reserved for the admin
+  // tier. The job-queue link below is this page's one operator surface.
+  const canRetry = ADMIN_TIER.includes(role);
+  const canManage = ADMIN_TIER.includes(role);
+  const canOperate = OPERATOR_ROLES.includes(role);
   const [query, setQuery] = useState<VideoListQuery>({ page: 1, page_size: 20 });
   const [search, setSearch] = useState('');
   const [videos, setVideos] = useState<Video[]>([]);
@@ -24,6 +35,25 @@ export default function Videos() {
   const [deleteTarget, setDeleteTarget] = useState<Video | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
+
+  // The folder tree the move/copy dialog offers. Loaded once: it is small, and
+  // a stale entry only means a 404 the dialog reports.
+  useEffect(() => {
+    let cancelled = false;
+    foldersApi.list().then(
+      (result) => {
+        if (!cancelled) setFolders(result.items);
+      },
+      () => {
+        // Without the tree the dialog simply has no destination to offer.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Debounce the free-text search so every keystroke does not hit the API.
   useEffect(() => {
@@ -70,7 +100,16 @@ export default function Videos() {
       load();
     } catch (err) {
       const apiError = err as ApiError;
-      toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
+      if (apiError instanceof ApiError && apiError.code === 'job_in_progress') {
+        // Double-clicking Retry used to queue a second download of the same
+        // file; the API refuses now, so say why instead of showing a code.
+        toast.info('Already queued — a download for this video is queued or running.');
+      } else {
+        toast.error(
+          apiError instanceof ApiError ? apiError.code : 'unexpected_error',
+          apiError.message,
+        );
+      }
     } finally {
       setBusyId(null);
     }
@@ -201,9 +240,18 @@ export default function Videos() {
           videos={videos}
           loading={loading}
           busyId={busyId}
+          canManage={canManage}
+          canRetry={canRetry}
           onView={(video) => navigate(`/videos/${video.id}`)}
           onRetry={(video) => void onRetry(video)}
           onDelete={(video) => setDeleteTarget(video)}
+          onFile={(video) =>
+            setFileTarget({
+              video_id: video.id,
+              title: video.title,
+              folder_id: video.folder_id,
+            })
+          }
         />
         {!loading && videos.length > 0 ? (
           <Pagination
@@ -211,6 +259,7 @@ export default function Videos() {
             pageSize={pageSize}
             total={total}
             itemLabel="videos"
+            pageSizes={[10, 20, 50, 100, ALL_ROWS]}
             onPageChange={(next) => setQuery((prev) => ({ ...prev, page: next }))}
             onPageSizeChange={(size) => setQuery((prev) => ({ ...prev, page_size: size, page: 1 }))}
           />
@@ -230,6 +279,17 @@ export default function Videos() {
         }}
       />
 
+      <FileVideoDialog
+        target={fileTarget}
+        folders={folders}
+        defaultMode={fileTarget?.folder_id ? 'copy' : 'move'}
+        onClose={() => setFileTarget(null)}
+        onDone={(message) => {
+          toast.success(message);
+          void load();
+        }}
+      />
+
       <ConfirmDialog
         open={deleteTarget !== null}
         destructive
@@ -245,11 +305,15 @@ export default function Videos() {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <div className="flex justify-end">
-        <button type="button" className={btnPrimary} onClick={() => navigate('/jobs')}>
-          Inspect the job queue
-        </button>
-      </div>
+      {/* The queue is operator-only (the /jobs route guard agrees); hiding the
+          link for reviewers and users keeps the button from ending in a redirect. */}
+      {canOperate ? (
+        <div className="flex justify-end">
+          <button type="button" className={btnPrimary} onClick={() => navigate('/jobs')}>
+            Inspect the job queue
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

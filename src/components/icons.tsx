@@ -218,6 +218,19 @@ export const ArrowUpRightIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const LogoutIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path
+      d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="m16 17 5-5-5-5M21 12H8.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 export const CloseIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -249,5 +262,18 @@ export const MusicIcon = (p: IconProps) => (
     />
     <circle cx="6.5" cy="18" r="2.5" stroke="currentColor" strokeWidth="1.7" />
     <circle cx="16.5" cy="16" r="2.5" stroke="currentColor" strokeWidth="1.7" />
+  </Svg>
+);
+
+/** Move a folder to another parent. */
+export const MoveIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path
+      d="M4 7h6l2 2h8v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+    <path d="M14 13h-4m0 0 2-2m-2 2 2 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );

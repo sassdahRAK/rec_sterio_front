@@ -221,6 +221,8 @@ export default function Jobs() {
           loading={loading}
           videoTitles={videoTitles}
           busyId={busyId}
+          canRetry
+          canCancel
           onRetry={(job) => void onRetry(job)}
           onCancel={(job) => void onCancel(job)}
         />

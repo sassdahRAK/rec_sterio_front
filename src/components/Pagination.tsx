@@ -1,5 +1,8 @@
 import { btnNeutral } from './ui';
 
+/** Page size that means "everything in one page"; rendered as "All". */
+export const ALL_ROWS = 1000;
+
 interface PaginationProps {
   page: number;
   pageSize: number;
@@ -42,7 +45,7 @@ export default function Pagination({
             >
               {pageSizes.map((size) => (
                 <option key={size} value={size}>
-                  {size}
+                  {size === ALL_ROWS ? 'All' : size}
                 </option>
               ))}
             </select>

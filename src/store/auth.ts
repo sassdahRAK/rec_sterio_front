@@ -9,6 +9,7 @@ import {
   UNAUTHORIZED_EVENT,
 } from '../api/client';
 import type { LoginResponse, Role } from '../api/types';
+import { CONSOLE_ROLES } from '../api/types';
 
 const NAME_STORAGE_KEY = 'recsterio.session.name';
 const ROLE_STORAGE_KEY = 'recsterio.session.role';
@@ -27,7 +28,7 @@ interface AuthState {
   name: string | null;
   role: Role;
   expiresAt: string | null;
-  /** True once a real account (admin or Google member) is signed in. */
+  /** True once an account holding one of the five console roles is signed in. */
   isAuthenticated: boolean;
   /** True while a token exists, including the automatic guest session. */
   hasToken: boolean;
@@ -68,12 +69,22 @@ function readScope(): FolderScope | null {
   return { folderId, access };
 }
 
+/**
+ * Only the five account roles count as a signed-in console operator. A missing
+ * or unknown role (guest, telegram, legacy data) falls to the guest path —
+ * authentication never fails open.
+ */
+function isAccountRole(role: Role): boolean {
+  return CONSOLE_ROLES.includes(role);
+}
+
 function persistSession(result: LoginResponse): void {
   writeStored(TOKEN_STORAGE_KEY, result.token);
   writeStored(EMAIL_STORAGE_KEY, result.email || null);
   writeStored(EXPIRES_STORAGE_KEY, result.expires_at);
   writeStored(NAME_STORAGE_KEY, result.name ?? null);
-  writeStored(ROLE_STORAGE_KEY, result.role ?? 'admin');
+  // No default: a response without a role is treated as a guest session.
+  writeStored(ROLE_STORAGE_KEY, result.role ?? null);
   writeStored(SCOPE_STORAGE_KEY, null);
   writeStored(ACCESS_STORAGE_KEY, null);
 }
@@ -106,13 +117,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email, password) => {
     const result = await authApi.login({ email, password });
     persistSession(result);
+    const role = result.role ?? 'guest';
     set({
       token: result.token,
       email: result.email,
       name: result.name ?? null,
-      role: result.role ?? 'admin',
+      role,
       expiresAt: result.expires_at,
-      isAuthenticated: true,
+      isAuthenticated: isAccountRole(role),
       hasToken: true,
       scope: null,
       ready: true,
@@ -122,13 +134,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loginWithGoogle: async (credential) => {
     const result = await authApi.google(credential);
     persistSession(result);
+    const role = result.role ?? 'guest';
     set({
       token: result.token,
       email: result.email,
       name: result.name ?? null,
-      role: result.role ?? 'member',
+      role,
       expiresAt: result.expires_at,
-      isAuthenticated: true,
+      isAuthenticated: isAccountRole(role),
       hasToken: true,
       scope: null,
       ready: true,
@@ -198,14 +211,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ ...SIGNED_OUT, ready: false });
       return;
     }
-    const role = (readStored(ROLE_STORAGE_KEY) as Role | null) ?? 'admin';
+    const role = (readStored(ROLE_STORAGE_KEY) as Role | null) ?? 'guest';
     set({
       token,
       email: readStored(EMAIL_STORAGE_KEY),
       name: readStored(NAME_STORAGE_KEY),
       role,
       expiresAt,
-      isAuthenticated: role === 'admin' || role === 'member',
+      isAuthenticated: isAccountRole(role),
       hasToken: true,
       scope: readScope(),
       ready: true,

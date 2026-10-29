@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, jobsApi, mergesApi, transcriptsApi, videosApi } from '../api/client';
 import type { Job, Merge, Transcript, TranscriptEngine, VideoDetail } from '../api/types';
+import { ADMIN_TIER, OPERATOR_ROLES, TRANSCRIPT_EDIT_ROLES } from '../api/types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorState from '../components/ErrorState';
 import JobTable from '../components/JobTable';
@@ -13,6 +14,7 @@ import TranscriptVersionList from '../components/TranscriptVersionList';
 import VideoPlayer from '../components/VideoPlayer';
 import { btnDanger, btnNeutral, btnPrimary, selectCls } from '../components/ui';
 import { formatBytes, formatDateTime, formatDuration, formatRelative, shortId } from '../lib/format';
+import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
 
 const pipelineStages = ['pending', 'downloading', 'downloaded', 'transcribing', 'transcribed'] as const;
@@ -72,6 +74,18 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
 export default function VideoDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const role = useAuthStore((s) => s.role);
+  const email = useAuthStore((s) => s.email);
+
+  // Mirrors the server's capability matrix: the admin tier manages (generate,
+  // merge, delete) and — because re-enqueueing a download needs editor rights
+  // on the video — retries ingestion; reviewers may correct transcripts;
+  // operators still requeue *jobs* (the history table below is an operator
+  // surface, unlike the video-level retry); everyone else reads.
+  const canOperate = OPERATOR_ROLES.includes(role);
+  const canManage = ADMIN_TIER.includes(role);
+  const canEditTranscript = TRANSCRIPT_EDIT_ROLES.includes(role);
+  const canRetryVideo = ADMIN_TIER.includes(role);
 
   const [detail, setDetail] = useState<VideoDetail | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -285,6 +299,14 @@ export default function VideoDetailPage() {
 
   const videoTitle = detail.title ?? detail.source_url;
 
+  // Applying a merge promotes the merged transcript to be the current one,
+  // which the server gates on editor rights over the video: the admin tier or
+  // the account that ingested it (`created_by` is the `<role>:<email>` actor
+  // string). An invited folder editor qualifies server-side too, but this page
+  // never loads the folder tree to know that — the button is simply hidden for
+  // them and the API still enforces the right.
+  const canApplyMerge = canManage || (email != null && detail.created_by === `${role}:${email}`);
+
   return (
     <div className="mx-auto max-w-[96rem] space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
@@ -297,39 +319,47 @@ export default function VideoDetailPage() {
             <StatusBadge status={String(detail.status)} />
             <PlatformBadge platform={String(detail.platform)} />
             <span className="font-mono text-2xs text-faint">id {shortId(detail.id)}</span>
-            <span className="font-mono text-2xs text-faint">by {detail.created_by}</span>
+            <span className="font-mono text-2xs text-faint">by {detail.created_by_display ?? detail.created_by}</span>
           </div>
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <label htmlFor="engine" className="sr-only">
-              Transcription engine
-            </label>
-            <select
-              id="engine"
-              value={engine}
-              onChange={(e) => setEngine(e.target.value as TranscriptEngine)}
-              className={`${selectCls} w-32 rounded-full`}
-            >
-              <option value="both">both</option>
-              <option value="whisper">whisper</option>
-              <option value="gemini">gemini</option>
-            </select>
-            <button type="button" onClick={() => void onGenerate()} disabled={generating || polling} className={`${btnPrimary} rounded-full`}>
-              {generating || polling ? <Spinner className="h-3.5 w-3.5" /> : null}
-              {polling ? 'Transcribing…' : 'Generate transcript'}
+          {canManage ? (
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="engine" className="sr-only">
+                Transcription engine
+              </label>
+              <select
+                id="engine"
+                value={engine}
+                onChange={(e) => setEngine(e.target.value as TranscriptEngine)}
+                className={`${selectCls} w-32 rounded-full`}
+              >
+                <option value="both">both</option>
+                <option value="whisper">whisper</option>
+                <option value="gemini">gemini</option>
+              </select>
+              <button type="button" onClick={() => void onGenerate()} disabled={generating || polling} className={`${btnPrimary} rounded-full`}>
+                {generating || polling ? <Spinner className="h-3.5 w-3.5" /> : null}
+                {polling ? 'Transcribing…' : 'Generate transcript'}
+              </button>
+            </div>
+          ) : null}
+          {canManage ? (
+            <button type="button" onClick={() => void onStartMerge()} className={`${btnNeutral} rounded-full`}>
+              Start merge
             </button>
-          </div>
-          <button type="button" onClick={() => void onStartMerge()} className={`${btnNeutral} rounded-full`}>
-            Start merge
-          </button>
-          <button type="button" onClick={() => void onRetryVideo()} className={`${btnNeutral} rounded-full`}>
-            Retry
-          </button>
-          <button type="button" onClick={() => setDeleteOpen(true)} className={`${btnDanger} rounded-full`}>
-            Delete
-          </button>
+          ) : null}
+          {canRetryVideo ? (
+            <button type="button" onClick={() => void onRetryVideo()} className={`${btnNeutral} rounded-full`}>
+              Retry
+            </button>
+          ) : null}
+          {canManage ? (
+            <button type="button" onClick={() => setDeleteOpen(true)} className={`${btnDanger} rounded-full`}>
+              Delete
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -383,7 +413,7 @@ export default function VideoDetailPage() {
               <span className="break-all">{detail.checksum_sha256 ?? '—'}</span>
             </MetaRow>
             <MetaRow label="Local path">{detail.local_path ?? '—'}</MetaRow>
-            <MetaRow label="Created by">{detail.created_by}</MetaRow>
+            <MetaRow label="Created by">{detail.created_by_display ?? detail.created_by}</MetaRow>
             <MetaRow label="Created">{formatDateTime(detail.created_at)}</MetaRow>
             <MetaRow label="Updated">{formatRelative(detail.updated_at)}</MetaRow>
             <MetaRow label="Notes">{detail.notes ?? '—'}</MetaRow>
@@ -397,6 +427,7 @@ export default function VideoDetailPage() {
             transcript={transcript}
             nextVersion={nextVersion}
             saving={saving}
+            readOnly={!canEditTranscript}
             onSave={(content, language) => void onSaveTranscript(content, language)}
           />
         </div>
@@ -430,6 +461,7 @@ export default function VideoDetailPage() {
           jobs={detail.jobs}
           loading={false}
           videoTitles={{ [detail.id]: videoTitle }}
+          canRetry={canOperate}
           onRetry={(job) => void onRetryJob(job)}
         />
       </section>
@@ -455,6 +487,7 @@ export default function VideoDetailPage() {
               merge={merge}
               applying={applyingMergeId === merge.id}
               applied={appliedMergeIds.includes(merge.id)}
+              canApply={canApplyMerge}
               onApply={(target) => void onApplyMerge(target)}
             />
           ))

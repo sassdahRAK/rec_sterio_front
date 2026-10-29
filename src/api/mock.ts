@@ -4,6 +4,7 @@
  * without the real backend. Shapes mirror docs/API_CONTRACT.md exactly.
  */
 import type {
+  AdminUser,
   DataCard as MockDataCard,
   DiffSegment,
   Folder,
@@ -19,6 +20,7 @@ import type {
   Video,
   VideoDetail,
 } from './types';
+import { CONSOLE_ROLES } from './types';
 
 const now = Date.now();
 const iso = (offsetMs: number): string => new Date(now - offsetMs).toISOString();
@@ -146,6 +148,7 @@ export const mockVideos: Video[] = videoSeed.map((v) => ({
   title: v.title ?? null,
   notes: v.notes ?? null,
   folder_id: v.folder_id ?? null,
+  copied_from_id: v.copied_from_id ?? null,
   position: v.position ?? 0,
   status: v.status ?? 'pending',
   progress: v.progress ?? 0,
@@ -732,6 +735,79 @@ let mockPasscodes: MockPasscode[] = [
   },
 ];
 
+/** Whether the demo console account has a Telegram bound. Linking completes in the bot, never here. */
+let mockTelegramLink: { telegram_user_id: number | null } = { telegram_user_id: null };
+
+/* ------------------------------------------------------------------- users */
+
+/** One demo console account. `password` never leaves the mock. */
+interface MockUser extends AdminUser {
+  password: string;
+}
+
+/** The five demo accounts — one per role, so the login form can show every gated view. */
+let mockUsers: MockUser[] = [
+  {
+    id: uid(6001),
+    email: 'demo@recsterio.local',
+    name: 'Demo owner',
+    role: 'super_admin',
+    is_active: true,
+    created_at: iso(90_000_000),
+    telegram_user_id: 12345678,
+    password: 'demo1234',
+  },
+  {
+    id: uid(6002),
+    email: 'admin@recsterio.local',
+    name: 'Platform admin',
+    role: 'admin',
+    is_active: true,
+    created_at: iso(80_000_000),
+    telegram_user_id: null,
+    password: 'demo1234',
+  },
+  {
+    id: uid(6003),
+    email: 'dev@recsterio.local',
+    name: 'Pipeline developer',
+    role: 'developer',
+    is_active: true,
+    created_at: iso(70_000_000),
+    telegram_user_id: null,
+    password: 'demo1234',
+  },
+  {
+    id: uid(6004),
+    email: 'reviewer@recsterio.local',
+    name: 'Transcript reviewer',
+    role: 'reviewer',
+    is_active: true,
+    created_at: iso(60_000_000),
+    telegram_user_id: null,
+    password: 'demo1234',
+  },
+  {
+    id: uid(6005),
+    email: 'user@recsterio.local',
+    name: 'Scoped member',
+    role: 'user',
+    is_active: true,
+    created_at: iso(50_000_000),
+    telegram_user_id: null,
+    password: 'demo1234',
+  },
+];
+
+/** Email of whoever last logged in — the mock's stand-in for the bearer token. */
+let mockSessionEmail: string | null = null;
+
+/** The wire shape of a user: everything except the stored password. */
+const publicUser = (user: MockUser): AdminUser => {
+  const { password: _password, ...safe } = user;
+  return clone(safe);
+};
+
 function mockFolderTree(): Folder[] {
   const nodes = new Map<string, Folder>();
   mockFolders.forEach((folder) => {
@@ -769,6 +845,7 @@ function mockCard(video: Video): MockDataCard {
     thumbnail_url: video.thumbnail_url,
     folder_id: video.folder_id,
     folder_name: folder?.name ?? null,
+    copied_from_id: video.copied_from_id,
     badge: transcript?.cleaned ? 'cleaned' : 'raw',
     transcript_id: transcript?.id ?? null,
     transcript_preview: transcript?.content ? transcript.content.slice(0, 240) : null,
@@ -826,9 +903,27 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
         },
       };
     }
+    // A seeded email signs in as that account's role; anything else gets the
+    // plain 'user' role so the demo can show every gated view. The password
+    // rule stays the demo one (≥4 chars, any value).
+    const known = mockUsers.find((u) => u.email === creds.email);
+    if (known && !known.is_active) {
+      return {
+        status: 403,
+        data: {
+          error: {
+            code: 'account_deactivated',
+            message: 'This account has been deactivated. Ask a super admin to reactivate it.',
+          },
+        },
+      };
+    }
+    mockSessionEmail = known?.email ?? creds.email;
     const res: LoginResponse = {
       token: 'mock.admin.token.' + Date.now().toString(36),
-      email: creds.email,
+      email: mockSessionEmail,
+      role: known?.role ?? 'user',
+      name: known?.name ?? null,
       expires_at: new Date(Date.now() + 12 * 3600_000).toISOString(),
     };
     return { status: 200, data: res };
@@ -869,6 +964,7 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
       notes: null,
       folder_id: null,
       position: 0,
+      copied_from_id: null,
       status: 'pending',
       progress: 0,
       error: null,
@@ -1024,6 +1120,59 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     if (segments[2] === 'media' && method === 'GET') {
       return notFound('Media is not available in demo data.');
     }
+
+    if (segments[2] === 'folder' && method === 'PUT') {
+      const payload = body as { folder_id?: string | null };
+      video.folder_id = payload.folder_id ?? null;
+      video.position = payload.folder_id
+        ? mockVideos.filter((v) => v.folder_id === payload.folder_id).length
+        : 0;
+      video.updated_at = new Date().toISOString();
+      return { status: 200, data: clone(video) };
+    }
+
+    if (segments[2] === 'copy' && method === 'POST') {
+      const payload = body as { folder_id?: string };
+      const dest = mockFolders.find((f) => f.id === payload.folder_id);
+      if (!dest) return notFound('Folder not found.');
+      if (video.folder_id === dest.id) {
+        return {
+          status: 422,
+          data: {
+            error: {
+              code: 'validation_failed',
+              message: 'That video is already in this folder.',
+              details: [{ field: 'folder_id', issue: 'same_folder' }],
+            },
+          },
+        };
+      }
+      const fork: Video = {
+        ...clone(video),
+        id: uid(900 + mockVideos.length),
+        folder_id: dest.id,
+        position: mockVideos.filter((v) => v.folder_id === dest.id).length,
+        copied_from_id: video.id,
+        created_by: 'admin:demo',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      mockVideos.unshift(fork);
+      const current = mockTranscripts
+        .filter((t) => t.video_id === video.id)
+        .sort((a, b) => b.version - a.version)[0];
+      if (current) {
+        mockTranscripts.push({
+          ...clone(current),
+          id: uid(1000 + mockTranscripts.length),
+          video_id: fork.id,
+          version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+      return { status: 201, data: clone(fork) };
+    }
   }
 
   if (segments[0] === 'merges' && segments.length >= 2) {
@@ -1076,17 +1225,146 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
   }
 
   if (rawPath === '/auth/me' && method === 'GET') {
+    const current = mockUsers.find((u) => u.email === mockSessionEmail) ?? mockUsers[0];
     return {
       status: 200,
       data: {
-        actor: 'admin:demo@recsterio.local',
-        role: 'admin',
-        email: 'demo@recsterio.local',
-        name: 'Demo operator',
+        actor: `admin:${current.email}`,
+        role: current.role,
+        email: current.email,
+        name: current.name,
         avatar_url: null,
         folder_ids: [],
       },
     };
+  }
+
+  if (rawPath === '/auth/telegram-link') {
+    if (method === 'POST') {
+      // Linking completes in the bot, never in the console — the mock keeps the
+      // binding null and only hands out the one-time code.
+      return {
+        status: 200,
+        data: {
+          code: 'DEMO1234',
+          deep_link: 'https://t.me/recsteriobot?start=link-DEMO1234',
+          expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+        },
+      };
+    }
+    if (method === 'GET') return { status: 200, data: { ...mockTelegramLink } };
+    if (method === 'DELETE') {
+      mockTelegramLink.telegram_user_id = null;
+      return { status: 204, data: null };
+    }
+  }
+
+  /* -------------------------------------------------- users (super_admin demo) */
+
+  if (rawPath === '/users' && method === 'GET') {
+    const q = query.get('q') ?? '';
+    const role = query.get('role') ?? '';
+    const active = query.get('is_active');
+    const items = mockUsers
+      .filter(
+        (u) =>
+          (!role || u.role === role) &&
+          (active === null ? true : String(u.is_active) === active) &&
+          (matches(u.email, q) || matches(u.name, q)),
+      )
+      .map(publicUser);
+    return { status: 200, data: paginate(items, p('page', 1), p('page_size', 20)) };
+  }
+
+  if (rawPath === '/users' && method === 'POST') {
+    const payload = body as { email?: string; name?: string | null; role?: string; password?: string };
+    const role = payload.role as AdminUser['role'] | undefined;
+    if (
+      !payload.email ||
+      !payload.email.includes('@') ||
+      !role ||
+      !CONSOLE_ROLES.includes(role) ||
+      !payload.password ||
+      payload.password.length < 8
+    ) {
+      return {
+        status: 422,
+        data: {
+          error: {
+            code: 'validation_failed',
+            message: 'An email, a console role and a password of at least 8 characters are required.',
+            details: [{ field: 'password', issue: 'min_length' }],
+          },
+        },
+      };
+    }
+    if (mockUsers.some((u) => u.email === payload.email)) {
+      return {
+        status: 409,
+        data: {
+          error: { code: 'duplicate_email', message: 'That email already has an account.' },
+        },
+      };
+    }
+    const user: MockUser = {
+      id: uid(6010 + mockUsers.length),
+      email: payload.email,
+      name: payload.name ?? null,
+      role,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      telegram_user_id: null,
+      password: payload.password,
+    };
+    mockUsers.push(user);
+    return { status: 201, data: publicUser(user) };
+  }
+
+  if (segments[0] === 'users' && segments.length === 2 && method === 'PATCH') {
+    const user = mockUsers.find((u) => u.id === segments[1]);
+    if (!user) return notFound('User not found.');
+    const patch = body as { role?: string; is_active?: boolean; name?: string | null; password?: string };
+    // The demo mirrors the server: you cannot change your own role or state.
+    if ((patch.role !== undefined || patch.is_active !== undefined) && user.email === mockSessionEmail) {
+      return {
+        status: 422,
+        data: {
+          error: {
+            code: 'self_modification_forbidden',
+            message: 'You cannot change your own role or active state.',
+          },
+        },
+      };
+    }
+    if (patch.role !== undefined && !CONSOLE_ROLES.includes(patch.role as AdminUser['role'])) {
+      return {
+        status: 422,
+        data: {
+          error: {
+            code: 'validation_failed',
+            message: 'That is not a console role.',
+            details: [{ field: 'role', issue: 'invalid' }],
+          },
+        },
+      };
+    }
+    if (patch.password !== undefined && patch.password.length < 8) {
+      return {
+        status: 422,
+        data: {
+          error: {
+            code: 'validation_failed',
+            message: 'The password must be at least 8 characters.',
+            details: [{ field: 'password', issue: 'min_length' }],
+          },
+        },
+      };
+    }
+    if (patch.role !== undefined) user.role = patch.role as AdminUser['role'];
+    if (patch.is_active !== undefined) user.is_active = Boolean(patch.is_active);
+    if (patch.name !== undefined) user.name = patch.name;
+    if (patch.password !== undefined) user.password = patch.password;
+    return { status: 200, data: publicUser(user) };
   }
 
   if (rawPath === '/public/config' && method === 'GET') {

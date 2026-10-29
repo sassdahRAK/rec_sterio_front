@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isMockEnabled, videosApi } from '../api/client';
 import { formatBytes, formatDuration } from '../lib/format';
+import { claimPlayback, releasePlayback } from '../lib/playback';
 import ErrorState from './ErrorState';
 import Spinner from './Spinner';
 
@@ -69,6 +70,9 @@ export default function VideoPlayer({
             src={objectUrl}
             controls
             preload="metadata"
+            onPlay={(event) => claimPlayback(event.currentTarget)}
+            onPause={(event) => releasePlayback(event.currentTarget)}
+            onEnded={(event) => releasePlayback(event.currentTarget)}
             className="h-full w-full"
             aria-label={title ? `Media for ${title}` : 'Video media'}
           />

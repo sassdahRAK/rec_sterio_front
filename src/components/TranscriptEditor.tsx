@@ -10,9 +10,11 @@ interface TranscriptEditorProps {
   nextVersion: number;
   saving: boolean;
   onSave: (content: string, language: string | null) => void;
+  /** Roles without transcript-edit rights see the text but no save controls. */
+  readOnly?: boolean;
 }
 
-export default function TranscriptEditor({ transcript, nextVersion, saving, onSave }: TranscriptEditorProps) {
+export default function TranscriptEditor({ transcript, nextVersion, saving, onSave, readOnly = false }: TranscriptEditorProps) {
   const [content, setContent] = useState('');
   const [language, setLanguage] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -61,6 +63,7 @@ export default function TranscriptEditor({ transcript, nextVersion, saving, onSa
           }}
           rows={14}
           spellCheck={false}
+          readOnly={readOnly}
           placeholder="Transcript text will appear here once a transcription job has produced one."
           className={`${inputCls} resize-y font-mono text-[13px] leading-relaxed`}
         />
@@ -75,32 +78,39 @@ export default function TranscriptEditor({ transcript, nextVersion, saving, onSa
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
               placeholder="km-en"
+              readOnly={readOnly}
               className={inputCls}
             />
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              className={btnNeutral}
-              disabled={!dirty || saving}
-              onClick={() => {
-                setContent(transcript?.content ?? '');
-                setLanguage(transcript?.language ?? '');
-                setDirty(false);
-              }}
-            >
-              Discard changes
-            </button>
-            <button
-              type="button"
-              className={btnPrimary}
-              disabled={unchanged || saving || !content.trim()}
-              onClick={() => onSave(content, language.trim() || null)}
-            >
-              {saving ? <Spinner className="h-3.5 w-3.5" /> : null}
-              Save as version {nextVersion}
-            </button>
+            {readOnly ? (
+              <span className="text-2xs text-faint">Read-only — your role cannot edit transcripts.</span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={btnNeutral}
+                  disabled={!dirty || saving}
+                  onClick={() => {
+                    setContent(transcript?.content ?? '');
+                    setLanguage(transcript?.language ?? '');
+                    setDirty(false);
+                  }}
+                >
+                  Discard changes
+                </button>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={unchanged || saving || !content.trim()}
+                  onClick={() => onSave(content, language.trim() || null)}
+                >
+                  {saving ? <Spinner className="h-3.5 w-3.5" /> : null}
+                  Save as version {nextVersion}
+                </button>
+              </>
+            )}
           </div>
         </div>
 

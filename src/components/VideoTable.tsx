@@ -12,10 +12,36 @@ interface VideoTableProps {
   onView?: (video: Video) => void;
   onRetry?: (video: Video) => void;
   onDelete?: (video: Video) => void;
+  /** Open the move/copy dialog — how a library video reaches a folder at all. */
+  onFile?: (video: Video) => void;
   busyId?: string | null;
+  /** Right to file and delete videos (admin tier); hides those buttons otherwise. */
+  canManage?: boolean;
+  /** Right to retry ingestion (operator roles); hides the retry button otherwise. */
+  canRetry?: boolean;
 }
 
-export default function VideoTable({ videos, loading, onView, onRetry, onDelete, busyId }: VideoTableProps) {
+/**
+ * True when the server marked this row unopenable for the caller. The library
+ * tiers (developer/reviewer) see rows of private folders they hold no role on;
+ * `can_open: false` flags the rows whose detail page would only 403. A row
+ * without the flag — demo data, older payloads — reads as openable.
+ */
+function cannotOpen(video: Video): boolean {
+  return video.can_open === false;
+}
+
+export default function VideoTable({
+  videos,
+  loading,
+  onView,
+  onRetry,
+  onDelete,
+  onFile,
+  busyId,
+  canManage = false,
+  canRetry = false,
+}: VideoTableProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-3 px-6 py-16">
@@ -55,16 +81,28 @@ export default function VideoTable({ videos, loading, onView, onRetry, onDelete,
           {videos.map((video) => (
             <tr key={video.id} className="transition-colors hover:bg-raised/40">
               <td className={tableCellCls}>
-                <Link
-                  to={`/videos/${video.id}`}
-                  className="tap-pad block max-w-[12rem] truncate font-medium text-fg hover:text-accent"
-                  title={video.title ?? video.source_url}
-                >
-                  {video.title ?? <span className="text-faint italic">Untitled video</span>}
-                </Link>
+                {cannotOpen(video) ? (
+                  <span
+                    className="block max-w-[12rem] truncate font-medium text-dim"
+                    title={video.title ?? video.source_url}
+                  >
+                    {video.title ?? <span className="text-faint italic">Untitled video</span>}
+                  </span>
+                ) : (
+                  <Link
+                    to={`/videos/${video.id}`}
+                    className="tap-pad block max-w-[12rem] truncate font-medium text-fg hover:text-accent"
+                    title={video.title ?? video.source_url}
+                  >
+                    {video.title ?? <span className="text-faint italic">Untitled video</span>}
+                  </Link>
+                )}
                 <span className="mt-0.5 block max-w-[12rem] truncate font-mono text-2xs text-faint">
                   {video.source_url}
                 </span>
+                {video.copied_from_id ? (
+                  <span className="chip mt-1 border-accent/40 bg-accent/10 text-accent">copy</span>
+                ) : null}
                 {video.error ? (
                   <span className="mt-1 block max-w-[12rem] truncate text-2xs text-bad" title={video.error}>
                     {video.error}
@@ -101,28 +139,44 @@ export default function VideoTable({ videos, loading, onView, onRetry, onDelete,
                     type="button"
                     onClick={() => onView?.(video)}
                     className={`${btnGhost} px-1.5 py-1 text-xs`}
-                    disabled={busyId === video.id}
+                    disabled={cannotOpen(video) || busyId === video.id}
+                    title={cannotOpen(video) ? 'No access' : undefined}
                   >
                     View
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onRetry?.(video)}
-                    className={`${btnNeutral} px-1.5 py-1 text-xs`}
-                    disabled={busyId === video.id}
-                    title="Re-enqueue the download job"
-                  >
-                    Retry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete?.(video)}
-                    className={`${btnGhost} px-1.5 py-1 text-xs text-bad hover:bg-bad-soft`}
-                    disabled={busyId === video.id}
-                    title="Delete this video and its transcripts"
-                  >
-                    Delete
-                  </button>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => onFile?.(video)}
+                      className={`${btnNeutral} px-1.5 py-1 text-xs`}
+                      disabled={busyId === video.id}
+                      title="Move or copy this video into a folder"
+                    >
+                      Folder…
+                    </button>
+                  ) : null}
+                  {canRetry ? (
+                    <button
+                      type="button"
+                      onClick={() => onRetry?.(video)}
+                      className={`${btnNeutral} px-1.5 py-1 text-xs`}
+                      disabled={busyId === video.id}
+                      title="Re-enqueue the download job"
+                    >
+                      Retry
+                    </button>
+                  ) : null}
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => onDelete?.(video)}
+                      className={`${btnGhost} px-1.5 py-1 text-xs text-bad hover:bg-bad-soft`}
+                      disabled={busyId === video.id}
+                      title="Delete this video and its transcripts"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
                 </div>
               </td>
             </tr>

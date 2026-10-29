@@ -49,6 +49,8 @@ export interface Video {
   title: string | null;
   notes: string | null;
   folder_id: string | null;
+  /** Set when this row is a fork of another video; null for an ingested one. */
+  copied_from_id: string | null;
   position: number;
   status: VideoStatus | string;
   progress: number;
@@ -62,12 +64,23 @@ export interface Video {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /**
+   * Whether this caller could open the row's detail page (server-computed per
+   * row on the listings: the library tiers see rows of private folders they
+   * hold no role on). Optional so demo/mock payloads — which carry no such
+   * flag — keep reading as openable.
+   */
+  can_open?: boolean;
 }
 
 /** `GET /videos/{id}` returns the video plus its transcripts and jobs. */
 export interface VideoDetail extends Video {
   transcripts: Transcript[];
   jobs: Job[];
+  /** "Name (email)" for the linked Telegram user that collected this video; null when unresolvable. */
+  created_by_display?: string | null;
+  /** Same resolution for whoever last forked/moved the unit into its folder. */
+  collected_by_display?: string | null;
 }
 
 export interface Segment {
@@ -187,7 +200,32 @@ export interface LoginResponse {
   name?: string | null;
 }
 
-export type Role = 'admin' | 'member' | 'guest' | 'telegram';
+export type Role =
+  | 'super_admin'
+  | 'admin'
+  | 'developer'
+  | 'reviewer'
+  | 'user'
+  | 'guest'
+  | 'telegram';
+
+/** The five roles a real console account can hold. */
+export const CONSOLE_ROLES: Role[] = ['super_admin', 'admin', 'developer', 'reviewer', 'user'];
+
+/** Roles that may run ingestion and job operations (everything but reviewer/user). */
+export const OPERATOR_ROLES: Role[] = ['super_admin', 'admin', 'developer'];
+
+/** The two tiers that manage the platform, its content and its folders. */
+export const ADMIN_TIER: Role[] = ['super_admin', 'admin'];
+
+/**
+ * Roles that may correct any video's transcript (the server's
+ * `require_transcript_editor` widening of the folder-editor rule).
+ */
+export const TRANSCRIPT_EDIT_ROLES: Role[] = ['super_admin', 'admin', 'reviewer'];
+
+/** The one role that manages console accounts (the Users page and its route). */
+export const SUPER_ADMIN_ONLY: Role[] = ['super_admin'];
 
 /** Who the bearer token belongs to (GET /auth/me). */
 export interface Me {
@@ -206,6 +244,19 @@ export interface GuestSession {
   email: string | null;
   folder_ids: string[];
   expires_at: string;
+}
+
+/** POST /auth/telegram-link — a one-time code the bot redeems to bind a Telegram account. */
+export interface TelegramLink {
+  code: string;
+  /** `https://t.me/<bot>?start=link-<code>`; null until the operator sets TELEGRAM_BOT_USERNAME. */
+  deep_link: string | null;
+  expires_at: string;
+}
+
+/** GET /auth/telegram-link — whether the console account already has a Telegram bound. */
+export interface TelegramLinkState {
+  telegram_user_id: number | null;
 }
 
 export interface PublicConfig {
@@ -296,6 +347,8 @@ export interface DataCard {
   thumbnail_url: string | null;
   folder_id: string | null;
   folder_name: string | null;
+  /** A fork of another unit, or null for an independently collected one. */
+  copied_from_id: string | null;
   badge: 'raw' | 'cleaned';
   transcript_id: string | null;
   transcript_preview: string | null;
@@ -303,6 +356,16 @@ export interface DataCard {
   media_url: string;
   audio_url: string;
   transcript_url: string;
+  /** Where the bytes live: null = server disk, else 'google' | 'onedrive'. */
+  storage_backend?: 'google' | 'onedrive' | null;
+  /** False when the contributor's drive is disconnected — listed but unplayable. */
+  storage_available?: boolean;
+  /**
+   * Whether this caller could open the card's video (the card dialog loads its
+   * transcript via GET /videos/{id}). Server-computed per card; optional so
+   * demo/mock payloads keep reading as openable.
+   */
+  can_open?: boolean;
 }
 
 export interface DatasetCardPage {
@@ -382,6 +445,37 @@ export interface CreateMergeRequest {
   base_transcript_id: string;
   gemini_transcript_id?: string | null;
   model?: string | null;
+}
+
+/* -------------------------------------------------------- users (super_admin) */
+
+/** One console account as the Users page lists it (GET /users). */
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: Role;
+  is_active: boolean;
+  created_at: string;
+  telegram_user_id?: number | null;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  name?: string | null;
+  role: Role;
+  password: string;
+}
+
+/** PATCH /users/{id} — everything except id/email/created_at/telegram binding. */
+export type UserPatch = Partial<Pick<AdminUser, 'role' | 'is_active' | 'name'> & { password: string }>;
+
+export interface UserListQuery {
+  q?: string;
+  role?: string;
+  is_active?: boolean;
+  page?: number;
+  page_size?: number;
 }
 
 /* ------------------------------------------------------------- status sets */

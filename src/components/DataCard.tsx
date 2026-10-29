@@ -6,10 +6,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, mediaApi } from '../api/client';
 import type { DataCard as DataCardModel } from '../api/types';
-import { formatDuration, truncate } from '../lib/format';
+import { formatDuration } from '../lib/format';
+import { claimPlayback, releasePlayback } from '../lib/playback';
 import { toast } from '../store/toast';
 import {
   DownloadIcon,
+  FolderIcon,
   LockIcon,
   PauseIcon,
   PencilIcon,
@@ -21,8 +23,20 @@ import {
 interface DataCardProps {
   card: DataCardModel;
   editable?: boolean;
+  /**
+   * Right to delete the unit. Defaults to `editable` so existing callers keep
+   * the old behaviour; the dataset passes it separately because reviewers may
+   * edit transcripts but never delete.
+   */
+  deletable?: boolean;
   onEdit?: (card: DataCardModel) => void;
   onDelete?: (card: DataCardModel) => void;
+  /**
+   * Open the move/copy dialog. Offered even when the card is not editable,
+   * because copying somebody else's unit into your own folder is the whole
+   * point of a fork — it only needs read access to this card.
+   */
+  onFile?: (card: DataCardModel) => void;
   index?: number;
 }
 
@@ -66,7 +80,10 @@ function useMediaBlob(kind: 'video' | 'audio', videoId: string) {
 function VideoPane({ card }: { card: DataCardModel }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const { url, loading, load } = useMediaBlob('video', card.video_id);
-  const ready = card.status === 'transcribed' || card.status === 'downloaded';
+  // A cloud-stored unit whose drive is disconnected cannot be fetched: the
+  // play button would only ever produce a 404, so it is not offered.
+  const driveOffline = card.storage_backend != null && card.storage_available === false;
+  const ready = (card.status === 'transcribed' || card.status === 'downloaded') && !driveOffline;
 
   const start = async (): Promise<void> => {
     const src = await load();
@@ -86,6 +103,10 @@ function VideoPane({ card }: { card: DataCardModel }) {
             src={url}
             controls
             playsInline
+            // One screen, one soundtrack: starting this stops any other card.
+            onPlay={(event) => claimPlayback(event.currentTarget)}
+            onPause={(event) => releasePlayback(event.currentTarget)}
+            onEnded={(event) => releasePlayback(event.currentTarget)}
             className="h-full w-full object-contain"
           />
         ) : (
@@ -93,7 +114,13 @@ function VideoPane({ card }: { card: DataCardModel }) {
             type="button"
             onClick={() => void start()}
             disabled={!ready || loading}
-            aria-label={ready ? `Play ${card.title ?? 'video'}` : 'Media is still processing'}
+            aria-label={
+              driveOffline
+                ? "Storage unavailable — the contributor's drive is disconnected"
+                : ready
+                  ? `Play ${card.title ?? 'video'}`
+                  : 'Media is still processing'
+            }
             className="group relative flex h-full w-full items-center justify-center"
           >
             {card.thumbnail_url ? (
@@ -114,7 +141,7 @@ function VideoPane({ card }: { card: DataCardModel }) {
             </span>
             {!ready ? (
               <span className="absolute bottom-2 left-2 rounded-full bg-card/85 px-2 py-0.5 text-2xs uppercase tracking-wider text-dim ring-1 ring-line">
-                {card.status}
+                {driveOffline ? 'storage unavailable' : card.status}
               </span>
             ) : null}
           </button>
@@ -129,21 +156,61 @@ const BAR_HEIGHTS = [
   26, 12, 30, 22, 16, 26, 14, 20, 30, 18, 26, 12, 24, 16,
 ];
 
+/**
+ * The audio artifact: one player, not two.
+ *
+ * The row itself is the player — its button drives a hidden `<audio>` element.
+ * Rendering a native `<audio controls>` underneath as well (as this used to)
+ * showed the same clip twice, and the two play states fought each other.
+ * The waveform doubles as the seek bar, so nothing is lost by hiding the
+ * browser's own controls.
+ */
 function AudioPane({ card }: { card: DataCardModel }) {
   const { url, loading, load } = useMediaBlob('audio', card.video_id);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [armed, setArmed] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  const duration = card.duration_seconds ?? 0;
+  const progress = duration > 0 ? Math.min(1, elapsed / duration) : 0;
+
+  // Start playing as soon as the bytes exist: the first click only had the
+  // blob URL to fetch, and asking for a second click to hear it is a bug.
+  useEffect(() => {
+    if (!armed || !url) return;
+    const audio = audioRef.current;
+    if (audio) void audio.play().catch(() => setPlaying(false));
+  }, [armed, url]);
 
   const toggle = async (): Promise<void> => {
     if (!url) {
-      const src = await load();
-      if (!src) return;
       setArmed(true);
+      const src = await load();
+      if (!src) setArmed(false);
       return;
     }
-    setArmed(true);
-    setPlaying((p) => !p);
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      claimPlayback(audio);
+      await audio.play().catch(() => setPlaying(false));
+    } else {
+      audio.pause();
+    }
   };
+
+  // Click anywhere on the waveform to seek, like the native scrubber did.
+  const seek = (event: React.MouseEvent<HTMLDivElement>): void => {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    audio.currentTime = fraction * audio.duration;
+    setElapsed(audio.currentTime);
+  };
+
+  const playedBars = Math.round(progress * BAR_HEIGHTS.length);
 
   return (
     <div>
@@ -165,11 +232,28 @@ function AudioPane({ card }: { card: DataCardModel }) {
           )}
         </button>
 
-        <div className="flex h-10 min-w-0 flex-1 items-center gap-[2px] overflow-hidden" aria-hidden="true">
+        <div
+          role="slider"
+          tabIndex={0}
+          aria-label="Seek audio"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration)}
+          aria-valuenow={Math.round(elapsed)}
+          onClick={seek}
+          onKeyDown={(event) => {
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (event.key === 'ArrowRight') audio.currentTime = Math.min(audio.duration, audio.currentTime + 5);
+            else if (event.key === 'ArrowLeft') audio.currentTime = Math.max(0, audio.currentTime - 5);
+          }}
+          className="flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-[2px] overflow-hidden rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        >
           {BAR_HEIGHTS.map((height, i) => (
             <span
               key={i}
-              className={`wave-bar ${playing ? 'animate-pulse-bar' : ''}`}
+              className={`wave-bar ${playing ? 'animate-pulse-bar' : ''} ${
+                i < playedBars ? 'bg-accent' : ''
+              }`}
               style={{
                 height: `${height}px`,
                 animationDelay: `${(i % 7) * 90}ms`,
@@ -179,19 +263,34 @@ function AudioPane({ card }: { card: DataCardModel }) {
           ))}
         </div>
 
-        <span className="shrink-0 font-mono text-2xs text-faint">
-          {card.audio_available ? formatDuration(card.duration_seconds) : 'no audio'}
+        <span className="shrink-0 font-mono text-2xs tabular-nums text-faint">
+          {card.audio_available
+            ? `${formatDuration(elapsed)} / ${formatDuration(card.duration_seconds)}`
+            : 'no audio'}
         </span>
       </div>
-      {armed && url ? (
+
+      {/* One hidden element is the only player on the card. */}
+      {armed ? (
         <audio
-          src={url}
-          controls
-          autoPlay
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={() => setPlaying(false)}
-          className="mt-2 h-8 w-full"
+          ref={audioRef}
+          src={url ?? undefined}
+          preload="metadata"
+          onPlay={(event) => {
+            claimPlayback(event.currentTarget);
+            setPlaying(true);
+          }}
+          onPause={(event) => {
+            releasePlayback(event.currentTarget);
+            setPlaying(false);
+          }}
+          onTimeUpdate={() => setElapsed(audioRef.current?.currentTime ?? 0)}
+          onEnded={(event) => {
+            releasePlayback(event.currentTarget);
+            setPlaying(false);
+            setElapsed(0);
+          }}
+          className="hidden"
         />
       ) : null}
     </div>
@@ -208,7 +307,16 @@ function TranscriptPane({
   onEdit?: (card: DataCardModel) => void;
 }) {
   const [speaking, setSpeaking] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const textRef = useRef<HTMLParagraphElement | null>(null);
   const text = card.transcript_preview ?? '';
+
+  // The toggle only appears when the clamped text is actually cut off.
+  useEffect(() => {
+    const el = textRef.current;
+    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [text, expanded]);
   const initial = useMemo(() => (card.title?.trim()?.[0] ?? 'R').toUpperCase(), [card.title]);
 
   const speak = (): void => {
@@ -221,6 +329,9 @@ function TranscriptPane({
       setSpeaking(false);
       return;
     }
+    // Reading aloud is playback too: it stops any other card, and starting a
+    // video or audio player cancels it (see lib/playback).
+    claimPlayback({ pause: () => window.speechSynthesis.cancel() });
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'km-KH';
     utterance.onend = () => setSpeaking(false);
@@ -252,12 +363,22 @@ function TranscriptPane({
             </span>
             <div className="min-w-0 flex-1">
               <p
-                className="text-sm leading-relaxed text-fg"
+                ref={textRef}
+                className={`text-sm leading-relaxed text-fg${expanded ? '' : ' line-clamp-5'}`}
                 style={{ overflowWrap: 'anywhere' }}
-                title={text}
+                title={expanded ? undefined : text}
               >
-                {truncate(text, 220)}
+                {text}
               </p>
+              {overflowing || expanded ? (
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="mt-1 rounded text-2xs font-semibold uppercase tracking-wider text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                >
+                  {expanded ? 'Show less' : 'Show more'}
+                </button>
+              ) : null}
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
@@ -301,7 +422,16 @@ function TranscriptPane({
   );
 }
 
-export default function DataCard({ card, editable = false, onEdit, onDelete, index = 0 }: DataCardProps) {
+export default function DataCard({
+  card,
+  editable = false,
+  deletable,
+  onEdit,
+  onDelete,
+  onFile,
+  index = 0,
+}: DataCardProps) {
+  const canDelete = deletable ?? editable;
   // min-w-0 lets the grid track shrink below the card's min-content width —
   // the truncated title is nowrap, so without it the card pushed ~120px of
   // horizontal scroll at 360px (same bug the portal's DataCard had).
@@ -323,6 +453,40 @@ export default function DataCard({ card, editable = false, onEdit, onDelete, ind
             ) : (
               <span>Unfiled</span>
             )}
+            {card.copied_from_id ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span
+                  className="chip border-accent/40 bg-accent/10 text-accent"
+                  title="A copy of another unit — the original is somewhere else"
+                >
+                  copy
+                </span>
+              </>
+            ) : null}
+            {card.storage_backend ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span
+                  className={`chip ${
+                    card.storage_available === false
+                      ? 'border-bad/40 bg-bad-soft text-bad'
+                      : 'border-ok/40 bg-ok-soft text-ok'
+                  }`}
+                  title={
+                    card.storage_available === false
+                      ? "The contributor's drive is disconnected — reconnect it to play this unit"
+                      : `Stored in the contributor's ${card.storage_backend === 'google' ? 'Google Drive' : 'OneDrive'}`
+                  }
+                >
+                  {card.storage_available === false
+                    ? 'drive offline'
+                    : card.storage_backend === 'google'
+                      ? 'drive'
+                      : 'onedrive'}
+                </span>
+              </>
+            ) : null}
             <span aria-hidden="true">·</span>
             <span className="font-mono">{formatDuration(card.duration_seconds)}</span>
             {card.source_url && !card.source_url.startsWith('upload://') ? (
@@ -349,25 +513,36 @@ export default function DataCard({ card, editable = false, onEdit, onDelete, ind
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {onFile ? (
+            <button
+              type="button"
+              onClick={() => onFile(card)}
+              className="icon-btn"
+              aria-label="Move or copy this unit to a folder"
+              title="Move or copy to a folder"
+            >
+              <FolderIcon size={14} />
+            </button>
+          ) : null}
           {editable ? (
-            <>
-              <button
-                type="button"
-                onClick={() => onEdit?.(card)}
-                className="icon-btn"
-                aria-label="Edit this card"
-              >
-                <PencilIcon size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete?.(card)}
-                className="icon-btn hover:border-bad/50 hover:bg-bad-soft hover:text-bad"
-                aria-label="Delete this card"
-              >
-                <TrashIcon size={14} />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => onEdit?.(card)}
+              className="icon-btn"
+              aria-label="Edit this card"
+            >
+              <PencilIcon size={14} />
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              onClick={() => onDelete?.(card)}
+              className="icon-btn hover:border-bad/50 hover:bg-bad-soft hover:text-bad"
+              aria-label="Delete this card"
+            >
+              <TrashIcon size={14} />
+            </button>
           ) : null}
         </div>
       </header>

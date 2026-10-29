@@ -9,6 +9,12 @@ interface MergeDiffProps {
   merge: Merge;
   applying?: boolean;
   applied?: boolean;
+  /**
+   * Right to promote the merged transcript (the server's editor-on-video
+   * check). Defaults to hidden — only a caller that has verified the right
+   * shows the button.
+   */
+  canApply?: boolean;
   onApply: (merge: Merge) => void;
 }
 
@@ -55,7 +61,13 @@ const provenanceStyles: Record<string, { rail: string; chip: string; label: stri
   gemini: { rail: 'bg-violet', chip: 'border-violet/40 bg-violet-soft text-violet', label: 'gemini used' },
 };
 
-export default function MergeDiff({ merge, applying = false, applied = false, onApply }: MergeDiffProps) {
+export default function MergeDiff({
+  merge,
+  applying = false,
+  applied = false,
+  canApply = false,
+  onApply,
+}: MergeDiffProps) {
   const diff = merge.diff;
   const segments = diff?.segments ?? [];
   const stats = diff?.stats ?? {};
@@ -69,16 +81,18 @@ export default function MergeDiff({ merge, applying = false, applied = false, on
         {merge.model ? <span className="font-mono text-2xs text-faint">{merge.model}</span> : null}
         <span className="text-2xs text-faint">created {formatRelative(merge.created_at)}</span>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            className={btnPrimary}
-            disabled={!ready || applying || applied}
-            onClick={() => onApply(merge)}
-            title={ready ? 'Promote the merged transcript to be the current one' : 'This merge is not ready yet'}
-          >
-            {applying ? <Spinner className="h-3.5 w-3.5" /> : null}
-            {applied ? 'Merge applied' : 'Apply merge'}
-          </button>
+          {canApply ? (
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={!ready || applying || applied}
+              onClick={() => onApply(merge)}
+              title={ready ? 'Promote the merged transcript to be the current one' : 'This merge is not ready yet'}
+            >
+              {applying ? <Spinner className="h-3.5 w-3.5" /> : null}
+              {applied ? 'Merge applied' : 'Apply merge'}
+            </button>
+          ) : null}
         </div>
       </div>
 

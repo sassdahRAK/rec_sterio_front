@@ -1,15 +1,28 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { isMockEnabled } from '../api/client';
+import type { Role } from '../api/types';
+import { OPERATOR_ROLES, SUPER_ADMIN_ONLY } from '../api/types';
 import { useAuthStore } from '../store/auth';
+import ConfirmDialog from './ConfirmDialog';
 import ThemeToggle from './ThemeToggle';
 import Toast from './Toast';
-import { btnNeutral } from './ui';
+import { LogoutIcon } from './icons';
 
-const TABS = [
-  { to: '/overview', label: 'Overview' },
+interface Tab {
+  to: string;
+  label: string;
+  /** When set, the tab only shows for these roles (the capability matrix). */
+  roles?: Role[];
+}
+
+const TABS: Tab[] = [
+  { to: '/overview', label: 'Overview', roles: OPERATOR_ROLES },
   { to: '/videos', label: 'Videos' },
   { to: '/dataset', label: 'Dataset' },
-  { to: '/jobs', label: 'Jobs' },
+  { to: '/jobs', label: 'Jobs', roles: OPERATOR_ROLES },
+  { to: '/users', label: 'Users', roles: SUPER_ADMIN_ONLY },
+  { to: '/settings', label: 'Settings' },
 ];
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
@@ -22,7 +35,12 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 export default function Layout() {
   const navigate = useNavigate();
   const email = useAuthStore((s) => s.email);
+  const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+
+  // One filtered list feeds both nav bars; a role without a tab never sees it.
+  const visibleTabs = TABS.filter((tab) => !tab.roles || tab.roles.includes(role));
 
   return (
     <div className="min-h-screen bg-base text-fg">
@@ -34,7 +52,7 @@ export default function Layout() {
           </div>
 
           <nav className="mx-auto hidden items-center gap-1 rounded-full bg-raised p-1 dark:bg-black/25 md:flex" aria-label="Primary">
-            {TABS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <NavLink key={tab.to} to={tab.to} className={tabClass}>
                 {tab.label}
               </NavLink>
@@ -55,12 +73,10 @@ export default function Layout() {
             <ThemeToggle />
             <button
               type="button"
-              onClick={() => {
-                logout();
-                navigate('/login', { replace: true });
-              }}
-              className={`${btnNeutral} rounded-full border-line px-3.5 py-1.5`}
+              onClick={() => setSignOutOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-dim transition-colors hover:text-fg"
             >
+              <LogoutIcon size={14} />
               Sign out
             </button>
           </div>
@@ -71,7 +87,7 @@ export default function Layout() {
           className="mt-2 flex items-center gap-1 rounded-full border border-line bg-raised p-1 dark:bg-black/25 md:hidden"
           aria-label="Primary"
         >
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <NavLink
               key={tab.to}
               to={tab.to}
@@ -90,6 +106,20 @@ export default function Layout() {
       <main className="min-w-0 flex-1 px-4 py-5 sm:px-6">
         <Outlet />
       </main>
+
+      <ConfirmDialog
+        open={signOutOpen}
+        destructive
+        title="Sign out?"
+        message="You'll need to sign in again to get back to the console."
+        confirmLabel="Sign out"
+        onConfirm={() => {
+          setSignOutOpen(false);
+          logout();
+          navigate('/login', { replace: true });
+        }}
+        onCancel={() => setSignOutOpen(false)}
+      />
 
       <Toast />
     </div>

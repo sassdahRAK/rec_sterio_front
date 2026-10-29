@@ -8,7 +8,9 @@
  */
 import { mockRequest } from './mock';
 import type {
+  AdminUser,
   CreateMergeRequest,
+  CreateUserRequest,
   DatasetCardPage,
   ErrorDetail,
   Folder,
@@ -35,8 +37,12 @@ import type {
   Segment,
   ShareLink,
   Stats,
+  TelegramLink,
+  TelegramLinkState,
   Transcript,
   UpdateTranscriptRequest,
+  UserListQuery,
+  UserPatch,
   Video,
   VideoDetail,
   VideoListQuery,
@@ -179,9 +185,16 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 function toApiError(status: number, payload: unknown): ApiError {
   const envelope = payload as { error?: { code?: string; message?: string; details?: unknown } } | null;
   const code = envelope?.error?.code ?? `http_${status}`;
+  // A 5xx with no error envelope is almost always the dev proxy failing to
+  // reach the API, so name that instead of "The request failed." — it is the
+  // difference between a puzzle and a fix.
   const message =
     envelope?.error?.message ??
-    (status === 404 ? 'The requested resource was not found.' : 'The request failed.');
+    (status === 404
+      ? 'The requested resource was not found.'
+      : status >= 500
+        ? 'The API is not responding. Check that the backend is running.'
+        : 'The request failed.');
   const details = (envelope?.error?.details as ApiError['details']) ?? null;
   return new ApiError(code, message, status, details);
 }
@@ -205,6 +218,50 @@ export const authApi = {
     }),
 
   me: (): Promise<Me> => request<Me>('/auth/me'),
+};
+
+/* ---------------------------------------------------------------- settings */
+
+/**
+ * Console-account settings. Today that is just the Telegram link: the console
+ * mints a one-time code and the bot redeems it, so the bot can attribute
+ * downloads to this account and follow its admin role.
+ */
+export const settingsApi = {
+  /** Mint a fresh one-time code (any previous pending code is superseded). */
+  createTelegramLink: (): Promise<TelegramLink> =>
+    request<TelegramLink>('/auth/telegram-link', { method: 'POST' }),
+
+  getTelegramLink: (): Promise<TelegramLinkState> =>
+    request<TelegramLinkState>('/auth/telegram-link'),
+
+  /** Drop the binding; a new code can be generated right after. */
+  unlinkTelegram: (): Promise<void> =>
+    request<void>('/auth/telegram-link', { method: 'DELETE' }),
+};
+
+/* ------------------------------------------------------------------- users */
+
+/**
+ * Console-account administration. Super_admin only — the API answers 403 for
+ * every other role. Roles are DB-authoritative: a patch applies to the
+ * target's next request, no re-login needed.
+ */
+export const usersApi = {
+  list: (query: UserListQuery = {}): Promise<Paginated<AdminUser>> =>
+    request<Paginated<AdminUser>>('/users', {
+      query: {
+        ...query,
+        // buildQuery only takes string | number values; booleans travel as text.
+        is_active: query.is_active === undefined ? undefined : String(query.is_active),
+      },
+    }),
+
+  create: (body: CreateUserRequest): Promise<AdminUser> =>
+    request<AdminUser>('/users', { method: 'POST', body }),
+
+  patch: (id: string, body: UserPatch): Promise<AdminUser> =>
+    request<AdminUser>(`/users/${id}`, { method: 'PATCH', body }),
 };
 
 /* ------------------------------------------------------------------ stats */
@@ -297,6 +354,18 @@ export const videosApi = {
   remove: (id: string): Promise<void> => request<void>(`/videos/${id}`, { method: 'DELETE' }),
 
   retry: (id: string): Promise<Job> => request<Job>(`/videos/${id}/retry`, { method: 'POST' }),
+
+  /**
+   * Fork a video into a folder the caller manages. The original is untouched.
+   *
+   * `foldersApi.placeVideo` is the other half: that one *moves* the unit, needs
+   * edit rights where it currently lives, and takes it away from its audience.
+   */
+  copy: (id: string, folderId: string, position?: number): Promise<Video> =>
+    request<Video>(`/videos/${id}/copy`, {
+      method: 'POST',
+      body: { folder_id: folderId, position },
+    }),
 
   patch: (id: string, body: Partial<Pick<Video, 'title' | 'notes' | 'status'>>): Promise<Video> =>
     request<Video>(`/videos/${id}`, { method: 'PATCH', body }),

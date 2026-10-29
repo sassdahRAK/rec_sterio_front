@@ -1,11 +1,15 @@
 import { useEffect, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import type { Role } from './api/types';
+import { OPERATOR_ROLES, SUPER_ADMIN_ONLY } from './api/types';
 import Layout from './components/Layout';
 import Spinner from './components/Spinner';
 import Dataset from './pages/Dataset';
 import Jobs from './pages/Jobs';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
+import Settings from './pages/Settings';
+import Users from './pages/Users';
 import VideoDetailPage from './pages/VideoDetail';
 import Videos from './pages/Videos';
 import { registerUnauthorizedHandler, useAuthStore } from './store/auth';
@@ -35,6 +39,31 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return children;
 }
 
+/**
+ * Where a role lands by default.
+ *
+ * Overview is a pipeline dashboard and reads `GET /stats`, which is
+ * operator-only — sending a reviewer there paints a red "forbidden" panel on
+ * the first screen they see. Every other role starts on the dataset instead.
+ */
+function Home() {
+  const role = useAuthStore((s) => s.role);
+  return <Navigate to={OPERATOR_ROLES.includes(role) ? '/overview' : '/dataset'} replace />;
+}
+
+/**
+ * Caps a console route to the given roles. A signed-in account without the
+ * right is redirected within the console — a missing capability is not a
+ * session problem, so it never triggers the 401 logout path.
+ */
+function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  if (!roles.includes(role)) {
+    return <Home />;
+  }
+  return children;
+}
+
 export default function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
 
@@ -54,17 +83,42 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/overview" replace />} />
-        <Route path="overview" element={<Overview />} />
+        <Route index element={<Home />} />
+        <Route
+          path="overview"
+          element={
+            <RequireRole roles={OPERATOR_ROLES}>
+              <Overview />
+            </RequireRole>
+          }
+        />
         <Route path="videos" element={<Videos />} />
         <Route path="videos/:id" element={<VideoDetailPage />} />
-        <Route path="jobs" element={<Jobs />} />
+        <Route
+          path="jobs"
+          element={
+            <RequireRole roles={OPERATOR_ROLES}>
+              <Jobs />
+            </RequireRole>
+          }
+        />
         {/* Folders, share links, passcodes and the cleaned-data cards. */}
         <Route path="dataset" element={<Dataset />} />
         <Route path="dataset/f/:folderId" element={<Dataset />} />
+        {/* Console-account administration — super_admin only. */}
+        <Route
+          path="users"
+          element={
+            <RequireRole roles={SUPER_ADMIN_ONLY}>
+              <Users />
+            </RequireRole>
+          }
+        />
+        {/* Account-level settings: the Telegram link. */}
+        <Route path="settings" element={<Settings />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/overview" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
