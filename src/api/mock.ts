@@ -1604,14 +1604,32 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     return { status: 200, data: clone(mockDriveLinks) };
   }
   if (rawPath === '/cloud/links' && method === 'POST') {
-    const providerName = (body as { provider?: string })?.provider ?? 'google';
+    const payload = (body ?? {}) as { provider?: string; code?: string };
+    const providerName = (payload.provider ?? 'google') as CloudBackend;
+    // Mirror the real contract: an empty/exchange-already-consumed code is
+    // rejected, so demo mode can exercise the "start Connect again" error copy.
+    if (!payload.code) {
+      return {
+        status: 400,
+        data: {
+          error: {
+            code: 'cloud_auth_rejected',
+            message: 'That authorization code was already used or has expired.',
+            details: null,
+          },
+        },
+      };
+    }
     const link: DriveLink = {
-      id: `mock-drive-${mockDriveLinks.length + 1}`,
-      provider: providerName as CloudBackend,
-      account_email: 'demo@example.com',
+      id: `mock-drive-${providerName}`,
+      provider: providerName,
+      account_email: providerName === 'google' ? 'demo@gmail.com' : 'demo@onmicrosoft.com',
       connected_at: new Date().toISOString(),
     };
-    mockDriveLinks.push(link);
+    // One live link per (account, provider): reconnecting replaces the tokens.
+    const existing = mockDriveLinks.findIndex((l) => l.provider === providerName);
+    if (existing >= 0) mockDriveLinks.splice(existing, 1, link);
+    else mockDriveLinks.push(link);
     return { status: 201, data: clone(link) };
   }
   if (segments[0] === 'cloud' && segments[1] === 'links' && segments[2] && method === 'DELETE') {
