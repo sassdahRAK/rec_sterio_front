@@ -199,6 +199,9 @@ export default function Dataset() {
   const cardFileable = useCallback(
     (card: DataCardModel): boolean => {
       if (!isAuthenticated) return false;
+      // Cloud-stored units have no local bytes to copy from — the backend 409s.
+      // Hide the button rather than letting the user hit an error.
+      if (card.storage_backend != null) return false;
       if (ADMIN_TIER.includes(role)) return true;
       if (TRANSCRIPT_EDIT_ROLES.includes(role)) return false; // reviewer
       if (!card.folder_id) return card.can_open !== false;

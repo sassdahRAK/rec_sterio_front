@@ -508,3 +508,26 @@ export const JOB_KINDS: JobKind[] = [
   'gemini_transcribe',
   'merge',
 ];
+
+/* ------------------------------------------------------------ cloud storage */
+
+export type CloudBackend = 'google' | 'onedrive';
+
+export interface DriveLink {
+  id: string;
+  provider: CloudBackend;
+  account_email: string;
+  connected_at: string;
+}
+
+export interface CloudProviders {
+  google: boolean;
+  onedrive: boolean;
+}
+
+export interface CloudUpload {
+  video_id: string;
+  upload_url: string;
+  upload_headers: Record<string, string>;
+  expires_at?: string | null;
+}

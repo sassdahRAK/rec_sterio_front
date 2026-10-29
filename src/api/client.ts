@@ -9,9 +9,11 @@
 import { mockRequest } from './mock';
 import type {
   AdminUser,
+  CloudProviders,
   CreateMergeRequest,
   CreateUserRequest,
   DatasetCardPage,
+  DriveLink,
   ErrorDetail,
   Folder,
   FolderCreateRequest,
@@ -238,6 +240,25 @@ export const settingsApi = {
   /** Drop the binding; a new code can be generated right after. */
   unlinkTelegram: (): Promise<void> =>
     request<void>('/auth/telegram-link', { method: 'DELETE' }),
+};
+
+/* ----------------------------------------------------------------- cloud */
+
+export const cloudApi = {
+  providers: (): Promise<CloudProviders> =>
+    request<CloudProviders>('/cloud/providers'),
+
+  links: (): Promise<DriveLink[]> =>
+    request<DriveLink[]>('/cloud/links'),
+
+  connect: (provider: string, code: string, redirectUri?: string): Promise<DriveLink> =>
+    request<DriveLink>('/cloud/links', {
+      method: 'POST',
+      body: { provider, code, redirect_uri: redirectUri },
+    }),
+
+  disconnect: (provider: string): Promise<void> =>
+    request<void>(`/cloud/links/${provider}`, { method: 'DELETE' }),
 };
 
 /* ------------------------------------------------------------------- users */

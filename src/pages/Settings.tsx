@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, settingsApi } from '../api/client';
-import type { TelegramLink } from '../api/types';
+import { useSearchParams } from 'react-router-dom';
+import { ApiError, cloudApi, settingsApi } from '../api/client';
+import type { CloudBackend, DriveLink, TelegramLink } from '../api/types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorState from '../components/ErrorState';
 import Spinner from '../components/Spinner';
@@ -23,6 +24,13 @@ export default function Settings() {
   const [generating, setGenerating] = useState(false);
   const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
+
+  // Cloud storage state
+  const [params, setParams] = useSearchParams();
+  const [driveLinks, setDriveLinks] = useState<DriveLink[]>([]);
+  const [driveProviders, setDriveProviders] = useState<{ google: boolean; onedrive: boolean } | null>(null);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveBusy, setDriveBusy] = useState<false | CloudBackend>(false);
 
   // Returns a cleanup function so an unmount mid-request cannot set state.
   const load = useCallback((): (() => void) => {
@@ -47,6 +55,89 @@ export default function Settings() {
   }, []);
 
   useEffect(() => load(), [load]);
+
+  const loadDrives = useCallback(async () => {
+    setDriveLoading(true);
+    try {
+      const [providers, links] = await Promise.all([cloudApi.providers(), cloudApi.links()]);
+      setDriveProviders(providers);
+      setDriveLinks(links);
+    } catch {
+      // Non-fatal: cloud section stays empty
+    } finally {
+      setDriveLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadDrives(); }, [loadDrives]);
+
+  // OAuth return: exchange code for a drive link
+  useEffect(() => {
+    const provider = params.get('provider') as CloudBackend | null;
+    const code = params.get('code');
+    if (!provider || !code || !(['google', 'onedrive'] as string[]).includes(provider)) return;
+    const newParams = new URLSearchParams(params);
+    newParams.delete('provider');
+    newParams.delete('code');
+    setParams(newParams, { replace: true });
+    setDriveBusy(provider);
+    const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    cloudApi
+      .connect(provider, code, redirectUri)
+      .then((driveLink) => {
+        toast.success(
+          `Connected ${driveLink.account_email} to ${provider === 'google' ? 'Google Drive' : 'OneDrive'}.`,
+        );
+        return loadDrives();
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Failed to connect drive.';
+        toast.error('drive_connect_failed', msg);
+      })
+      .finally(() => setDriveBusy(false));
+  // params identity changes on every render if not memoised; the meaningful
+  // dependency is whether provider+code are present, so exhaustive-deps is
+  // intentionally limited here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function disconnectDrive(provider: CloudBackend): Promise<void> {
+    setDriveBusy(provider);
+    try {
+      await cloudApi.disconnect(provider);
+      toast.success('Drive disconnected. Videos stored there stay listed but cannot play until you reconnect.');
+      await loadDrives();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to disconnect.';
+      toast.error('drive_disconnect_failed', msg);
+    } finally {
+      setDriveBusy(false);
+    }
+  }
+
+  function connectUrl(provider: CloudBackend): string {
+    const redirect = encodeURIComponent(`${window.location.origin}${window.location.pathname}`);
+    if (provider === 'google') {
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+      if (!clientId) return '';
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file');
+      return (
+        `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}` +
+        `&redirect_uri=${redirect}&response_type=code&scope=${scope}` +
+        `&access_type=offline&prompt=consent`
+      );
+    }
+    // OneDrive
+    const clientId = import.meta.env.VITE_ONEDRIVE_CLIENT_ID as string | undefined;
+    if (!clientId) return '';
+    const scope = encodeURIComponent('offline_access https://graph.microsoft.com/Files.ReadWrite');
+    const tenant = (import.meta.env.VITE_ONEDRIVE_TENANT as string | undefined) ?? 'common';
+    return (
+      `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${redirect}&response_type=code&scope=${scope}` +
+      `&prompt=consent`
+    );
+  }
 
   const onGenerate = async (): Promise<void> => {
     setGenerating(true);
@@ -171,6 +262,77 @@ export default function Settings() {
           )}
         </section>
       )}
+
+      {/* ---- Cloud Storage ---- */}
+      <div>
+        <h2 className="mb-1 font-display text-lg font-semibold text-fg">Cloud storage</h2>
+        <p className="mb-4 text-sm text-dim">
+          Keep your contributed video bytes on your own cloud. Connect a drive here, then choose it
+          when uploading a clip — the file goes to your drive and the dataset catalogues it normally.
+        </p>
+        {driveLoading ? (
+          <div className="flex items-center gap-3 py-4">
+            <Spinner className="h-4 w-4" />
+            <span className="text-sm text-dim">Loading cloud storage…</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {(
+              [
+                {
+                  key: 'google' as CloudBackend,
+                  label: 'Google Drive',
+                  hint: 'Store videos in your own Google Drive (drive.file scope — only files this app creates).',
+                },
+                {
+                  key: 'onedrive' as CloudBackend,
+                  label: 'OneDrive',
+                  hint: 'Store videos in your own OneDrive via Microsoft Graph (Files.ReadWrite scope).',
+                },
+              ] as const
+            ).map((p) => {
+              const connected = driveLinks.find((l) => l.provider === p.key);
+              const offered = driveProviders?.[p.key];
+              const url = connectUrl(p.key);
+              return (
+                <div key={p.key} className="card p-4 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-medium text-fg">{p.label}</p>
+                    <p className="mt-0.5 text-xs text-dim">{p.hint}</p>
+                    {connected ? (
+                      <p className="mt-1 truncate text-xs text-ok">
+                        Connected as {connected.account_email}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0">
+                    {connected ? (
+                      <button
+                        type="button"
+                        disabled={driveBusy === p.key}
+                        onClick={() => void disconnectDrive(p.key)}
+                        className={`${btnDanger} rounded-md`}
+                      >
+                        {driveBusy === p.key ? 'Working…' : 'Disconnect'}
+                      </button>
+                    ) : offered === false ? (
+                      <span className="text-xs text-faint">Not configured</span>
+                    ) : !url ? (
+                      <span className="text-xs text-faint">
+                        Set VITE_{p.key.toUpperCase()}_CLIENT_ID to enable
+                      </span>
+                    ) : (
+                      <a href={url} className={`${btnPrimary} rounded-md`}>
+                        Connect
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={unlinkOpen}

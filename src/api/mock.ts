@@ -5,8 +5,11 @@
  */
 import type {
   AdminUser,
+  CloudBackend,
+  CloudProviders,
   DataCard as MockDataCard,
   DiffSegment,
+  DriveLink,
   Folder,
   FolderMember,
   FolderRole,
@@ -737,6 +740,9 @@ let mockPasscodes: MockPasscode[] = [
 
 /** Whether the demo console account has a Telegram bound. Linking completes in the bot, never here. */
 let mockTelegramLink: { telegram_user_id: number | null } = { telegram_user_id: null };
+
+/** Drive links connected via the cloud storage section (mock state, resets on page reload). */
+const mockDriveLinks: DriveLink[] = [];
 
 /* ------------------------------------------------------------------- users */
 
@@ -1588,6 +1594,30 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     if (method === 'GET') {
       return { status: 200, data: clone(job) };
     }
+  }
+
+  /* ------------------------------------------------------------------ cloud */
+  if (rawPath === '/cloud/providers' && method === 'GET') {
+    return { status: 200, data: { google: true, onedrive: false } as CloudProviders };
+  }
+  if (rawPath === '/cloud/links' && method === 'GET') {
+    return { status: 200, data: clone(mockDriveLinks) };
+  }
+  if (rawPath === '/cloud/links' && method === 'POST') {
+    const providerName = (body as { provider?: string })?.provider ?? 'google';
+    const link: DriveLink = {
+      id: `mock-drive-${mockDriveLinks.length + 1}`,
+      provider: providerName as CloudBackend,
+      account_email: 'demo@example.com',
+      connected_at: new Date().toISOString(),
+    };
+    mockDriveLinks.push(link);
+    return { status: 201, data: clone(link) };
+  }
+  if (segments[0] === 'cloud' && segments[1] === 'links' && segments[2] && method === 'DELETE') {
+    const idx = mockDriveLinks.findIndex((l) => l.provider === segments[2]);
+    if (idx >= 0) mockDriveLinks.splice(idx, 1);
+    return { status: 204, data: undefined };
   }
 
   return notFound(`No mock route for ${method} ${rawPath}.`);
