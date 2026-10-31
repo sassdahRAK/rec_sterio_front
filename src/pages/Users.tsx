@@ -19,7 +19,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
-  LockIcon,
   RefreshIcon,
   SearchIcon,
   UserPlusIcon,
@@ -162,44 +161,55 @@ export default function Users() {
   };
 
   // Shared by the table and the phone card list so the two never drift.
-  // The root row shows a lock chip instead of the select: the API answers
-  // 403 root_account_locked for any privilege edit, so offering the select
-  // would only invite the refusal toast.
-  const roleSelect = (user: AdminUser) =>
-    user.is_root ? (
-      <span
-        className="chip inline-flex items-center gap-1 border-line bg-raised text-dim"
-        title={ROOT_LOCK_HINT}
-      >
-        <LockIcon size={12} />
-        {user.role}
-        <span className="sr-only">{ROOT_LOCK_HINT}</span>
-      </span>
-    ) : (
-      <select
-        value={user.role}
-        onChange={(e) => void changeRole(user, e.target.value as AdminUser['role'])}
-        aria-label={`Role for ${user.email}`}
-        disabled={busyId === user.id || isSelf(user)}
-        title={isSelf(user) ? 'You cannot change your own role' : undefined}
-        className={`${selectCls} py-1 text-xs`}
-      >
-        {CONSOLE_ROLES.map((role) => (
-          <option key={role} value={role}>
-            {role}
-          </option>
-        ))}
-      </select>
+  // The root row keeps the same controls as every other row but disables
+  // them: the API answers 403 root_account_locked for any privilege edit, so
+  // the lock is shown in place instead of read as a missing affordance.
+  const roleSelect = (user: AdminUser) => {
+    const rootLocked = user.is_root === true;
+    return (
+      <>
+        <select
+          value={user.role}
+          onChange={(e) => void changeRole(user, e.target.value as AdminUser['role'])}
+          aria-label={`Role for ${user.email}`}
+          disabled={busyId === user.id || isSelf(user) || rootLocked}
+          title={
+            rootLocked
+              ? ROOT_LOCK_HINT
+              : isSelf(user)
+                ? 'You cannot change your own role'
+                : undefined
+          }
+          className={`${selectCls} py-1 text-xs`}
+        >
+          {CONSOLE_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {role}
+            </option>
+          ))}
+        </select>
+        {rootLocked ? <span className="sr-only">{ROOT_LOCK_HINT}</span> : null}
+      </>
     );
+  };
 
-  const statusAction = (user: AdminUser) =>
-    user.is_root ? null : user.is_active ? (
+  // Never returns null: a disabled button still names the action for assistive
+  // tech, and the native `disabled` attribute conveys the state.
+  const statusAction = (user: AdminUser) => {
+    const rootLocked = user.is_root === true;
+    return user.is_active ? (
       <button
         type="button"
         onClick={() => setTarget(user)}
-        disabled={busyId === user.id || isSelf(user)}
+        disabled={busyId === user.id || isSelf(user) || rootLocked}
         aria-label={`Deactivate ${user.email}`}
-        title={isSelf(user) ? 'You cannot deactivate your own account' : 'Deactivate'}
+        title={
+          rootLocked
+            ? ROOT_LOCK_HINT
+            : isSelf(user)
+              ? 'You cannot deactivate your own account'
+              : 'Deactivate'
+        }
         className={iconActionCls('bad')}
       >
         <CloseIcon size={15} />
@@ -208,14 +218,21 @@ export default function Users() {
       <button
         type="button"
         onClick={() => void activate(user)}
-        disabled={busyId === user.id || isSelf(user)}
+        disabled={busyId === user.id || isSelf(user) || rootLocked}
         aria-label={`Reactivate ${user.email}`}
-        title={isSelf(user) ? 'You cannot change your own active state' : 'Reactivate'}
+        title={
+          rootLocked
+            ? ROOT_LOCK_HINT
+            : isSelf(user)
+              ? 'You cannot change your own active state'
+              : 'Reactivate'
+        }
         className={iconActionCls('ok')}
       >
         <CheckIcon size={15} />
       </button>
     );
+  };
 
   const statusValue = query.is_active === undefined ? '' : query.is_active ? 'active' : 'inactive';
   const page = query.page ?? 1;
