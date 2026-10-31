@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ApiError, jobsApi, mergesApi, transcriptsApi, videosApi } from '../api/client';
+import { ApiError, jobsApi, mergesApi, retryGet, transcriptsApi, videosApi } from '../api/client';
 import type { Job, Merge, Transcript, TranscriptEngine, VideoDetail } from '../api/types';
 import { ADMIN_TIER, OPERATOR_ROLES, TRANSCRIPT_EDIT_ROLES } from '../api/types';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -13,12 +13,18 @@ import TranscriptEditor from '../components/TranscriptEditor';
 import TranscriptVersionList from '../components/TranscriptVersionList';
 import VideoPlayer from '../components/VideoPlayer';
 import { btnDanger, btnNeutral, btnPrimary, selectCls } from '../components/ui';
+import { MergeIcon, RefreshIcon, SparklesIcon, TrashIcon } from '../components/icons';
 import { formatBytes, formatDateTime, formatDuration, formatRelative, shortId } from '../lib/format';
 import { jobKindLabel, videoStatusLabel } from '../lib/statusLabels';
+import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
 
 const pipelineStages = ['pending', 'downloading', 'downloaded', 'transcribing', 'transcribed'] as const;
+
+function isActiveJob(job: Job): boolean {
+  return job.status === 'running' || job.status === 'queued';
+}
 
 function StageRail({ status, progress }: { status: string; progress: number }) {
   const failed = status === 'failed' || status === 'quarantined';
@@ -103,69 +109,122 @@ export default function VideoDetailPage() {
   const [appliedMergeIds, setAppliedMergeIds] = useState<string[]>([]);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const pollRef = useRef<number | null>(null);
 
+  // The transcript/versions pair has its own ordering channel — it is loaded
+  // independently of the detail (after saves and merge applies too). Ordering
+  // is decided by `transcriptAppliedSeq`: any response newer than the last one
+  // applied wins, and a failure never overwrites an applied success — except a
+  // 404, which is real data ("this video has no transcript yet"), exactly what
+  // the old unconditional null-on-error path showed in that case.
+  const transcriptReqSeq = useRef(0);
+  const transcriptAppliedSeq = useRef(0);
   const loadTranscriptData = useCallback(async (): Promise<void> => {
-    try {
-      const current = await transcriptsApi.current(id);
-      setTranscript(current);
-    } catch {
+    const seq = ++transcriptReqSeq.current;
+    const [currentRes, versionsRes] = await Promise.allSettled([
+      transcriptsApi.current(id),
+      transcriptsApi.versions(id),
+    ]);
+    if (seq < transcriptAppliedSeq.current) return;
+    transcriptAppliedSeq.current = seq;
+    if (currentRes.status === 'fulfilled') setTranscript(currentRes.value);
+    else if (currentRes.reason instanceof ApiError && currentRes.reason.status === 404) {
       setTranscript(null);
     }
-    try {
-      const list = await transcriptsApi.versions(id);
-      setVersions(list.items);
-    } catch {
+    if (versionsRes.status === 'fulfilled') setVersions(versionsRes.value.items);
+    else if (versionsRes.reason instanceof ApiError && versionsRes.reason.status === 404) {
       setVersions([]);
     }
   }, [id]);
 
-  const load = useCallback(async (): Promise<void> => {
-    setError(null);
+  // Detail + merges share one ordering channel with the 3s worker watch below,
+  // decided by `lastAppliedSeq`: any successful response newer than the last
+  // one applied is used — crucially, a StrictMode duplicate whose twin already
+  // succeeded is not treated as "stale" — and a failure never overwrites
+  // applied data. The error view renders only while no detail exists (see the
+  // `!detail` gate below), so a blip never hides a loaded video. Non-silent
+  // loads retry twice (1s/3s) before erroring.
+  const reqSeq = useRef(0);
+  const lastAppliedSeq = useRef(0);
+  const load = useCallback(
+    (silent = false): void => {
+      const seq = ++reqSeq.current;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      const run = () =>
+        Promise.all([
+          videosApi.get(id),
+          mergesApi.listForVideo(id).catch(() => ({ items: [] as Merge[] })),
+        ]);
+      (silent ? run() : retryGet(run))
+        .then(([detailResult, mergeList]) => {
+          if (seq < lastAppliedSeq.current) return;
+          lastAppliedSeq.current = seq;
+          setDetail(detailResult);
+          setMerges(mergeList.items);
+          setError(null);
+          // Watch the worker whenever any job is in flight — including one the
+          // Telegram bot queued — so this page follows the pipeline without a
+          // manual refresh. The poll stops itself once nothing is active.
+          if (detailResult.jobs.some(isActiveJob)) {
+            setPolling(true);
+            setPollStartedAt((prev) => prev ?? Date.now());
+          }
+          void loadTranscriptData();
+        })
+        .catch((err: unknown) => {
+          if (seq < lastAppliedSeq.current) return;
+          if (!silent) setError(err);
+        })
+        .finally(() => {
+          if (seq === reqSeq.current && !silent) setLoading(false);
+        });
+    },
+    [id, loadTranscriptData],
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // One lightweight status tick while a job is in flight — it never touches
+  // `loading`, so the page does not flash. It shares the detail ordering
+  // channel: a tick older than the last applied response is dropped, so it can
+  // never overwrite a newer manual load, and its own newer responses always
+  // win over older manual-load ones. When the last job leaves the queue, stop
+  // watching and pull the fresh transcript/merge results.
+  const pollTick = useCallback(async (): Promise<void> => {
+    const seq = ++reqSeq.current;
     try {
-      const [detailResult, mergeList] = await Promise.all([
-        videosApi.get(id),
-        mergesApi.listForVideo(id).catch(() => ({ items: [] as Merge[] })),
-      ]);
-      setDetail(detailResult);
-      setMerges(mergeList.items);
-      await loadTranscriptData();
-    } catch (err) {
-      setError(err);
+      const fresh = await videosApi.get(id);
+      if (seq < lastAppliedSeq.current) return;
+      lastAppliedSeq.current = seq;
+      setDetail(fresh);
+      const active = fresh.jobs.some(isActiveJob);
+      if (!active) {
+        setPolling(false);
+        setPollStartedAt(null);
+        setMerges(
+          (await mergesApi.listForVideo(id).catch(() => ({ items: [] as Merge[] }))).items,
+        );
+        void loadTranscriptData();
+        toast.success('The worker finished. This page is up to date.');
+      }
+    } catch {
+      /* keep polling; a transient error should not stop the watch */
     } finally {
-      setLoading(false);
+      // The newest response clears the spinner even if a manual load that
+      // started before this tick is still in flight — that older load will be
+      // dropped by the ordering guard above, so nothing left to wait for.
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, [id, loadTranscriptData]);
 
-  useEffect(() => {
-    setLoading(true);
-    void load();
-  }, [load]);
-
-  // Poll the video while a transcription job is in flight, then refresh the transcript.
-  useEffect(() => {
-    if (!polling) return;
-    const tick = async (): Promise<void> => {
-      try {
-        const fresh = await videosApi.get(id);
-        setDetail(fresh);
-        const active = fresh.jobs.some((job) => job.status === 'running' || job.status === 'queued');
-        if (!active) {
-          setPolling(false);
-          setPollStartedAt(null);
-          await loadTranscriptData();
-          toast.success('Transcription finished — the transcript has been refreshed.');
-        }
-      } catch {
-        /* keep polling; a transient error should not stop the watch */
-      }
-    };
-    pollRef.current = window.setInterval(() => void tick(), 3000);
-    return () => {
-      if (pollRef.current !== null) window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
-  }, [polling, id, loadTranscriptData]);
+  // The shared hook drives the 3s watch: it pauses on a hidden tab and ticks
+  // immediately on visible/focus, and it only runs while `polling` is set, so
+  // there is no second timer on this page.
+  useAutoRefresh(() => void pollTick(), { intervalMs: 3000, enabled: polling });
 
   const nextVersion = useMemo(
     () => versions.reduce((max, v) => Math.max(max, v.version), 0) + 1,
@@ -178,7 +237,7 @@ export default function VideoDetailPage() {
       const created = await transcriptsApi.save(id, { content, language, segments: null });
       toast.success(`Saved as version ${created.version}. The previous version is untouched.`);
       await loadTranscriptData();
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -194,7 +253,7 @@ export default function VideoDetailPage() {
       toast.success(`Queued ${result.jobs.length} job${result.jobs.length === 1 ? '' : 's'} for the ${engine} engine.`);
       setPollStartedAt(Date.now());
       setPolling(true);
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -230,7 +289,7 @@ export default function VideoDetailPage() {
     try {
       const created = await mergesApi.apply(merge.id);
       setAppliedMergeIds((prev) => [...prev, merge.id]);
-      toast.success(`Merge applied — version ${created.version} is now the current transcript.`);
+      toast.success(`Merge applied. Version ${created.version} is now the current transcript.`);
       await loadTranscriptData();
     } catch (err) {
       const apiError = err as ApiError;
@@ -244,7 +303,7 @@ export default function VideoDetailPage() {
     try {
       await videosApi.retry(id);
       toast.success('Re-queued the download job for this video.');
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -269,7 +328,7 @@ export default function VideoDetailPage() {
     try {
       await jobsApi.retry(job.id);
       toast.success(`${jobKindLabel(job.kind)} job re-queued.`);
-      await load();
+      load();
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(apiError instanceof ApiError ? apiError.code : 'unexpected_error', apiError.message);
@@ -285,10 +344,12 @@ export default function VideoDetailPage() {
     );
   }
 
-  if (error) {
+  // The failure view only replaces the page while there is no detail to keep;
+  // once the video is loaded, a failed reload or poll leaves it on screen.
+  if (error && !detail) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
-        <ErrorState error={error} onRetry={() => void load()} />
+        <ErrorState error={error} onRetry={() => load()} />
         <Link to="/videos" className="text-sm text-accent hover:underline">
           ← Back to the video library
         </Link>
@@ -309,7 +370,7 @@ export default function VideoDetailPage() {
   const canApplyMerge = canManage || (email != null && detail.created_by === `${role}:${email}`);
 
   return (
-    <div className="mx-auto max-w-[96rem] space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="min-w-0">
           <Link to="/videos" className="text-xs text-faint transition hover:text-accent">
@@ -340,25 +401,56 @@ export default function VideoDetailPage() {
                 <option value="whisper">Whisper only</option>
                 <option value="gemini">Gemini only</option>
               </select>
-              <button type="button" onClick={() => void onGenerate()} disabled={generating || polling} className={`${btnPrimary} rounded-full`}>
-                {generating || polling ? <Spinner className="h-3.5 w-3.5" /> : null}
-                {polling ? 'Transcribing…' : 'Generate transcript'}
+              {/* Icon + label on md+; the label collapses on phones, so every
+                  state (including the transcribing spinner) keeps its
+                  aria-label and tooltip. */}
+              <button
+                type="button"
+                onClick={() => void onGenerate()}
+                disabled={generating || polling}
+                className={`${btnPrimary} rounded-full`}
+                aria-label={polling ? 'Transcribing…' : 'Generate transcript'}
+                title={polling ? 'Watching the worker' : 'Generate a transcript'}
+              >
+                {generating || polling ? <Spinner className="h-3.5 w-3.5" /> : <SparklesIcon size={14} />}
+                <span className="hidden md:inline">{polling ? 'Transcribing…' : 'Generate'}</span>
               </button>
             </div>
           ) : null}
           {canManage ? (
-            <button type="button" onClick={() => void onStartMerge()} className={`${btnNeutral} rounded-full`}>
-              Start merge
+            <button
+              type="button"
+              onClick={() => void onStartMerge()}
+              className={`${btnNeutral} rounded-full`}
+              aria-label="Start merge"
+              title="Reconcile the Whisper and Gemini transcripts"
+            >
+              <MergeIcon size={14} />
+              <span className="hidden md:inline">Merge</span>
             </button>
           ) : null}
           {canRetryVideo ? (
-            <button type="button" onClick={() => void onRetryVideo()} className={`${btnNeutral} rounded-full`}>
-              Retry
+            <button
+              type="button"
+              onClick={() => void onRetryVideo()}
+              className={`${btnNeutral} rounded-full`}
+              aria-label="Retry the download"
+              title="Re-queue the download job"
+            >
+              <RefreshIcon size={14} />
+              <span className="hidden md:inline">Retry</span>
             </button>
           ) : null}
           {canManage ? (
-            <button type="button" onClick={() => setDeleteOpen(true)} className={`${btnDanger} rounded-full`}>
-              Delete
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className={`${btnDanger} rounded-full`}
+              aria-label="Delete this video"
+              title="Delete this video and its transcripts"
+            >
+              <TrashIcon size={14} />
+              <span className="hidden md:inline">Delete</span>
             </button>
           ) : null}
         </div>
@@ -409,14 +501,14 @@ export default function VideoDetailPage() {
             <MetaRow label="Platform">{String(detail.platform)}</MetaRow>
             <MetaRow label="Duration">{formatDuration(detail.duration_seconds)}</MetaRow>
             <MetaRow label="File size">{formatBytes(detail.file_size)}</MetaRow>
-            <MetaRow label="MIME type">{detail.mime_type ?? '—'}</MetaRow>
+            <MetaRow label="MIME type">{detail.mime_type ?? 'None'}</MetaRow>
             <MetaRow label="sha256">
-              <span className="break-all">{detail.checksum_sha256 ?? '—'}</span>
+              <span className="break-all">{detail.checksum_sha256 ?? 'None'}</span>
             </MetaRow>
             <MetaRow label="Created by">{detail.created_by_display ?? detail.created_by}</MetaRow>
             <MetaRow label="Created">{formatDateTime(detail.created_at)}</MetaRow>
             <MetaRow label="Updated">{formatRelative(detail.updated_at)}</MetaRow>
-            <MetaRow label="Notes">{detail.notes ?? '—'}</MetaRow>
+            <MetaRow label="Notes">{detail.notes ?? 'None'}</MetaRow>
           </dl>
         </section>
       </div>

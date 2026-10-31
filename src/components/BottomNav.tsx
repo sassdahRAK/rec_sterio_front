@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
 import { visibleTabsFor } from './navItems';
@@ -11,10 +13,18 @@ import { visibleTabsFor } from './navItems';
  * with the accent token (label included), matching how Telegram marks the
  * current tab — no per-item pill here, since the bar itself is the pill.
  * The item set is the same role-filtered TABS the header renders.
+ *
+ * When the items no longer fit (6 tabs on a ~360px phone), the pill scrolls
+ * horizontally instead of clipping the last tab: each item is pinned to a
+ * quarter of the row (minus its share of the 4px gaps) so EXACTLY 4 tabs are
+ * visible at a time — the rest are one snap-scroll away, never cut mid-glyph.
+ * At 360px each slot is ~78px, so the 44px+ tap targets hold. A tapped tab
+ * scrolls into view, and edge fades hint at off-screen tabs; the pill itself
+ * stays inside the inset-x-3 safe-area padding, so the page never overflows.
  */
 
 const ITEM_BASE =
-  'tap-pad flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1.5 text-[10px] leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 min-[430px]:text-[11px]';
+  'tap-pad flex min-h-[44px] shrink-0 grow-0 basis-[calc(25%-3px)] snap-center flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1.5 text-[10px] leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 min-[430px]:text-[11px]';
 
 const itemClass = ({ isActive }: { isActive: boolean }) =>
   `${ITEM_BASE} ${isActive ? 'font-semibold text-accent' : 'font-medium text-dim hover:text-fg'}`;
@@ -23,20 +33,67 @@ export default function BottomNav() {
   const role = useAuthStore((s) => s.role);
   const visibleTabs = visibleTabsFor(role);
 
+  // Overflow tracking for the edge fades: show a fade only on the side that
+  // still has content hidden by scrolling, so a fitting row stays clean.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState({ start: false, end: false });
+
+  const measure = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setOverflow({
+      start: el.scrollLeft > 2,
+      end: el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
+    });
+  }, []);
+
+  useEffect(() => {
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [measure, visibleTabs.length]);
+
+  // A partly off-screen tab tapped via keyboard/assistive tech (or a wide
+  // finger hit near the edge) should land centered in the pill.
+  const handleItemPress = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  };
+
   return (
     <nav
       aria-label="Mobile sections"
       className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 sm:hidden"
     >
-      <div className="mx-auto flex max-w-md items-stretch gap-1 rounded-full border border-line bg-card/90 px-1.5 py-0.5 shadow-panel backdrop-blur">
-        {visibleTabs.map((tab) => (
-          // Same NavLink semantics as the header's tabs: no `end`, so nested
-          // routes (/videos/:id, /dataset/f/:id) keep their tab highlighted.
-          <NavLink key={tab.to} to={tab.to} className={itemClass}>
-            <TabIcon to={tab.to} />
-            <span className="max-w-full truncate">{tab.label}</span>
-          </NavLink>
-        ))}
+      <div className="relative mx-auto max-w-md rounded-full border border-line bg-card/90 shadow-panel backdrop-blur">
+        <div
+          ref={scrollerRef}
+          onScroll={measure}
+          className="flex snap-x items-stretch gap-1 overflow-x-auto px-1.5 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {visibleTabs.map((tab) => (
+            // Same NavLink semantics as the header's tabs: no `end`, so nested
+            // routes (/videos/:id, /dataset/f/:id) keep their tab highlighted.
+            <NavLink key={tab.to} to={tab.to} className={itemClass} onClick={handleItemPress}>
+              <TabIcon to={tab.to} />
+              <span className="max-w-full truncate">{tab.label}</span>
+            </NavLink>
+          ))}
+        </div>
+
+        {/* Edge fades hint at more items; pointer-events-none so they never
+            eat taps on the tabs beneath them. */}
+        {overflow.start ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 rounded-l-full bg-gradient-to-r from-card to-transparent"
+          />
+        ) : null}
+        {overflow.end ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-full bg-gradient-to-l from-card to-transparent"
+          />
+        ) : null}
       </div>
     </nav>
   );

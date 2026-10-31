@@ -277,3 +277,148 @@ export const MoveIcon = (p: IconProps) => (
     <path d="M14 13h-4m0 0 2-2m-2 2 2 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
+
+/* ---- Console action icons (row buttons, toolbars, pagination) ---- */
+
+/** Refresh / retry — one circular arrow. Also use for "re-run job". */
+export const RefreshIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 12a8 8 0 1 1-2.35-5.65" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M20 4v4h-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+/** Merge — two heads joining one trunk. Use for file/media merge actions. */
+export const MergeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="18" cy="18" r="3" stroke="currentColor" strokeWidth="1.7" />
+    <circle cx="6" cy="6" r="3" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M6 21V9a9 9 0 0 0 9 9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </Svg>
+);
+
+/** Sparkles — AI/transcript generation affordance. */
+export const SparklesIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path
+      d="m11 4 1.7 4.3L17 10l-4.3 1.7L11 16l-1.7-4.3L5 10l4.3-1.7L11 4Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+    <path
+      d="m18 15.5.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m14.5 5.5-7 6.5 7 6.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m9.5 5.5 7 6.5-7 6.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+/** Vertical dots — row overflow menus (MoreIcon is the horizontal variant). */
+export const MoreVerticalIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="5" r="1.6" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+    <circle cx="12" cy="19" r="1.6" fill="currentColor" />
+  </Svg>
+);
+
+export const ExternalLinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 4 10.5 13.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path
+      d="M18 13.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4.5"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+export const EyeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path
+      d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
+  </Svg>
+);
+
+export const UserPlusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9.5" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.7" />
+    <path
+      d="M3.5 19.5c.6-3.3 3-5.2 6-5.2 1.1 0 2.1.25 3 .7"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+    />
+    <path d="M17.5 13.5v6M14.5 16.5h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </Svg>
+);
+
+/** Gear — settings. (BottomNav uses its own solid glyph; this is the stroke icon.) */
+export const SettingsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path
+      d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
+  </Svg>
+);
+
+/** Storage cylinders — dataset/storage. */
+export const DatabaseIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8" stroke="currentColor" strokeWidth="1.7" />
+    <path
+      d="M4.5 8.3v7.4c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V8.3"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+    />
+    <path d="M4.5 12c0 1.55 3.4 2.8 7.5 2.8s7.5-1.25 7.5-2.8" stroke="currentColor" strokeWidth="1.7" />
+  </Svg>
+);
+
+export const AlertTriangleIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path
+      d="M12 4.5 21 19.5H3L12 4.5Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M12 10v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M12 17h.01" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+  </Svg>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);

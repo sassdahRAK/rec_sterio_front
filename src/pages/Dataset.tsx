@@ -3,9 +3,9 @@
  * left, data cards on the right. Guests see public folders; signed-in users
  * also get "My folders", creation, sharing, passcodes and ZIP export.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ApiError, datasetApi, foldersApi, saveBlob, videosApi } from '../api/client';
+import { ApiError, datasetApi, foldersApi, retryGet, saveBlob, videosApi } from '../api/client';
 import type { DataCard as DataCardModel, Folder } from '../api/types';
 import { ADMIN_TIER, TRANSCRIPT_EDIT_ROLES } from '../api/types';
 import CardEditDialog from '../components/CardEditDialog';
@@ -21,9 +21,10 @@ import PasscodeDialog from '../components/PasscodeDialog';
 import ShareDialog from '../components/ShareDialog';
 import { btnNeutral, btnPrimary, inputCls, selectCls } from '../components/ui';
 import {
+  DatabaseIcon,
   DownloadIcon,
+  FolderIcon,
   KeyIcon,
-  PencilIcon,
   PlusIcon,
   SearchIcon,
   MoveIcon,
@@ -32,6 +33,7 @@ import {
 } from '../components/icons';
 import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
+import { useAutoRefresh } from '../lib/useAutoRefresh';
 
 const PAGE_SIZE = 20;
 
@@ -129,43 +131,62 @@ export default function Dataset() {
     };
   }, []);
 
-  // Returns a cleanup function so the effect can cancel it. The debounced
-  // search and the pager both retrigger this, and a slow earlier request must
-  // not overwrite a newer one.
-  const load = useCallback((): (() => void) => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      foldersApi.list(),
-      datasetApi.cards({
-        folder_id: folderId ?? undefined,
-        q: debounced || undefined,
-        page,
-        page_size: PAGE_SIZE,
-      }),
-    ])
-      .then(([folderList, result]) => {
-        if (cancelled) return;
-        setFolders(folderList.items);
-        setCards(result.items);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err);
-        setCards([]);
-        setTotal(0);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [folderId, debounced, page]);
+  // The debounced search and the pager both retrigger this, and a slow
+  // background poll can land after a manual refresh. Ordering is decided by
+  // `lastAppliedSeq`: any successful response newer than the last one applied
+  // is used — crucially, a duplicate StrictMode mount request whose twin
+  // already succeeded is not treated as "stale". A failure never overwrites
+  // applied cards; it only sets the error banner, which renders solely when
+  // there are no cards to keep. `silent` (the poll) skips the skeleton and
+  // swallows errors. Non-silent loads retry twice (1s/3s) before the banner.
+  const reqSeq = useRef(0);
+  const lastAppliedSeq = useRef(0);
+  const load = useCallback(
+    (silent = false): void => {
+      const seq = ++reqSeq.current;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      const run = () =>
+        Promise.all([
+          foldersApi.list(),
+          datasetApi.cards({
+            folder_id: folderId ?? undefined,
+            q: debounced || undefined,
+            page,
+            page_size: PAGE_SIZE,
+          }),
+        ]);
+      (silent ? run() : retryGet(run))
+        .then(([folderList, result]) => {
+          if (seq < lastAppliedSeq.current) return;
+          lastAppliedSeq.current = seq;
+          setFolders(folderList.items);
+          setCards(result.items);
+          setTotal(result.total);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          if (seq < lastAppliedSeq.current) return;
+          // Keep the visible cards; the banner only renders without data, so a
+          // blip over a loaded grid is invisible.
+          if (!silent) setError(err);
+        })
+        .finally(() => {
+          if (seq === reqSeq.current && !silent) setLoading(false);
+        });
+    },
+    [folderId, debounced, page],
+  );
 
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Poll so a freshly ingested recording (e.g. the bot just finished a
+  // download) shows up here too, without a manual refresh.
+  useAutoRefresh(load, { intervalMs: 15000 });
 
   const visibleCards = useMemo(() => {
     if (tab === 'all' || !email) return cards;
@@ -239,7 +260,7 @@ export default function Dataset() {
     try {
       const blob = await foldersApi.zip(folder.id);
       saveBlob(blob, `${folder.name.replace(/[^\w\u1780-\u17FF -]+/g, '_') || 'dataset'}.zip`);
-      toast.success(`Downloaded “${folder.name}” — video, audio and transcripts.`);
+      toast.success(`Downloaded “${folder.name}”: video, audio and transcripts.`);
     } catch (err) {
       const apiError = err as ApiError;
       toast.error(
@@ -326,7 +347,7 @@ export default function Dataset() {
             {loading ? 'loading…' : `${total} unit${total === 1 ? '' : 's'}`}
           </p>
         </div>
-        <div className="relative mx-auto w-full max-w-md">
+        <div className="relative order-2 mx-auto w-full max-w-md sm:order-none">
           <SearchIcon size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <input
             type="search"
@@ -344,9 +365,12 @@ export default function Dataset() {
           <button
             type="button"
             onClick={() => setFolderDialog({ open: true, parentId: selectedFolder?.id ?? null })}
-            className={`${btnPrimary} shrink-0 rounded-full`}
+            className={`${btnPrimary} order-1 ml-auto shrink-0 rounded-full sm:order-none`}
+            aria-label="New folder"
+            title="New folder"
           >
-            <PlusIcon size={14} /> New folder
+            <PlusIcon size={15} />
+            <span className="hidden sm:inline">New folder</span>
           </button>
         ) : null}
       </div>
@@ -381,23 +405,29 @@ export default function Dataset() {
             <label htmlFor="folder-picker" className="sr-only">
               Browse folders
             </label>
-            <select
-              id="folder-picker"
-              value={folderId ?? ''}
-              onChange={(event) => {
-                setPage(1);
-                navigate(event.target.value ? `/dataset/f/${event.target.value}` : '/dataset');
-              }}
-              className={selectCls}
-            >
-              <option value="">All units</option>
-              {folderOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {'\u00A0\u00A0'.repeat(option.depth)}
-                  {option.path.join(' · ')}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <FolderIcon
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
+              />
+              <select
+                id="folder-picker"
+                value={folderId ?? ''}
+                onChange={(event) => {
+                  setPage(1);
+                  navigate(event.target.value ? `/dataset/f/${event.target.value}` : '/dataset');
+                }}
+                className={`${selectCls} pl-9`}
+              >
+                <option value="">All units</option>
+                {folderOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {'\u00A0\u00A0'.repeat(option.depth)}
+                    {option.path.join(' · ')}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="hidden sm:block">
@@ -475,7 +505,9 @@ export default function Dataset() {
         </aside>
 
         <section className="min-w-0">
-          {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+          {error && cards.length === 0 ? (
+            <ErrorState error={error} onRetry={() => void load()} />
+          ) : null}
 
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -486,7 +518,7 @@ export default function Dataset() {
           ) : visibleCards.length === 0 ? (
             <div className="glow-card p-8 text-center">
               <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-raised text-faint">
-                <PencilIcon size={18} />
+                <DatabaseIcon size={18} />
               </span>
               <h2 className="mt-3 font-display text-base font-semibold text-fg">
                 {tab === 'mine' ? 'Your folders are empty' : 'No recordings here yet'}

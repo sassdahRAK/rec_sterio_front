@@ -129,6 +129,18 @@ interface RequestOptions {
   auth?: boolean;
 }
 
+/** Abort a GET that has not answered in this long. */
+const GET_TIMEOUT_MS = 10_000;
+
+/**
+ * In-flight GETs, keyed by `url::bearer`. React StrictMode double-invokes
+ * mount effects, so every page load issues two identical requests; a second
+ * identical GET issued while one is pending joins the same promise instead of
+ * hitting the network twice. The entry is removed as soon as the request
+ * settles, so polls and retries still get fresh responses.
+ */
+const inflightGets = new Map<string, Promise<unknown>>();
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? 'GET';
   const query = options.query ? buildQuery(options.query) : '';
@@ -142,46 +154,90 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (options.auth !== false) {
-    const token = readToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
+  const token = options.auth !== false ? readToken() : null;
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}${fullPath}`, {
-      method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-  } catch {
-    throw new ApiError(
-      'network_error',
-      'Could not reach the recsterio API. Check that the backend is running.',
-      0,
-    );
-  }
+  const url = `${API_BASE}${fullPath}`;
 
-  if (response.status === 204) return undefined as T;
-
-  const text = await response.text();
-  let payload: unknown = null;
-  if (text) {
+  const run = async (): Promise<T> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), GET_TIMEOUT_MS);
+    let response: Response;
     try {
-      payload = JSON.parse(text);
+      response = await fetch(url, {
+        method,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: ctrl.signal,
+      });
     } catch {
-      payload = null;
+      if (ctrl.signal.aborted) {
+        throw new ApiError('timeout', 'The request timed out. Please try again.', 408);
+      }
+      throw new ApiError(
+        'network_error',
+        'Could not reach the recsterio API. Check that the backend is running.',
+        0,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (response.status === 204) return undefined as T;
+
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+      }
+      throw toApiError(response.status, payload);
+    }
+
+    return payload as T;
+  };
+
+  if (method !== 'GET') return run();
+
+  const key = `${url}::${token ?? ''}`;
+  const pending = inflightGets.get(key);
+  if (pending) return pending as Promise<T>;
+  const p = run().finally(() => inflightGets.delete(key));
+  inflightGets.set(key, p);
+  return p;
+}
+
+/**
+ * Retry a first-load fetch a couple of times with backoff before the caller
+ * shows its error state. Used for non-silent loads only — the auto-refresh
+ * poll must not stack retries behind a slow backend.
+ */
+export async function retryGet<T>(
+  run: () => Promise<T>,
+  delaysMs: readonly number[] = [1000, 3000],
+  shouldRetry: (err: unknown) => boolean = () => true,
+): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await run();
+    } catch (err) {
+      // A caller that knows the failure is terminal (e.g. a 404 on a deleted
+      // resource) opts out of the backoff instead of paying the retry delays
+      // before showing the same error.
+      if (!shouldRetry(err) || attempt >= delaysMs.length) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
+      attempt += 1;
     }
   }
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
-    }
-    throw toApiError(response.status, payload);
-  }
-
-  return payload as T;
 }
 
 function toApiError(status: number, payload: unknown): ApiError {

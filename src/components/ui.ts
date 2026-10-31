@@ -32,3 +32,32 @@ export const tableHeadCls =
   'whitespace-nowrap px-3 py-2.5 text-left text-2xs font-semibold uppercase tracking-[0.12em] text-faint';
 
 export const tableCellCls = 'px-3 py-2.5 align-middle text-sm text-dim';
+
+/* ---- Icon-only buttons ----------------------------------------------------
+ * `iconBtnCls` is the neutral base for every icon-only control (row actions,
+ * toolbars, pagination). Desktop is a compact h-9 w-9 square; `tap-pad` lifts
+ * it to 44x44 on coarse pointers (see index.css), so no wrapper is needed.
+ * Colour is carried by the base (text-dim → hover text-fg); tinted row
+ * actions use `iconActionCls(variant)` instead so the state color never
+ * fights the base. */
+
+const iconBtnBase =
+  'tap-pad inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line ' +
+  'bg-card transition-colors duration-150 focus:outline-none focus-visible:ring-2 ' +
+  'focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-40';
+
+export const iconBtnCls = `${iconBtnBase} text-dim hover:bg-raised hover:text-fg`;
+
+export type IconActionVariant = 'neutral' | 'ok' | 'warn' | 'bad';
+
+const iconActionColor: Record<IconActionVariant, string> = {
+  neutral: 'text-dim hover:bg-raised hover:text-fg',
+  ok: 'text-ok hover:border-ok/50 hover:bg-ok-soft hover:text-ok',
+  warn: 'text-warn hover:border-warn/50 hover:bg-warn-soft hover:text-warn',
+  bad: 'text-bad hover:border-bad/50 hover:bg-bad-soft hover:text-bad',
+};
+
+/** Tinted icon-only row action: neutral (default) / ok / warn / bad. */
+export function iconActionCls(variant: IconActionVariant = 'neutral'): string {
+  return `${iconBtnBase} ${iconActionColor[variant]}`;
+}

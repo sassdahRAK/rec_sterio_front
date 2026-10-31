@@ -170,7 +170,7 @@ export default function FolderRail({
                   }}
                   style={{ paddingLeft: `${10 + depth * 14}px` }}
                   aria-label={
-                    draggable ? `${folder.name} — drag to move it under another folder` : folder.name
+                    draggable ? `${folder.name}, drag to move it under another folder` : folder.name
                   }
                   className={`tap-pad flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm transition-colors ${
                     active ? 'bg-accent-soft text-fg' : 'text-dim hover:bg-raised hover:text-fg'

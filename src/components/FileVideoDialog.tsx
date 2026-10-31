@@ -37,7 +37,7 @@ interface FileVideoDialogProps {
 function flattenFolders(items: Folder[], depth = 0): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
   for (const folder of items) {
-    out.push({ id: folder.id, label: `${'— '.repeat(depth)}${folder.name}` });
+    out.push({ id: folder.id, label: `${'\u00A0\u00A0'.repeat(depth)}${folder.name}` });
     out.push(...flattenFolders(folder.children ?? [], depth + 1));
   }
   return out;
@@ -83,10 +83,10 @@ export default function FileVideoDialog({
     try {
       if (mode === 'move') {
         await foldersApi.placeVideo(target.video_id, folderId);
-        onDone('Moved — the unit now lives in the folder you chose.');
+        onDone('Moved. The unit now lives in the folder you chose.');
       } else {
         await videosApi.copy(target.video_id, folderId);
-        onDone('Copied — the original is untouched and the copy is yours to edit.');
+        onDone('Copied. The original is untouched and the copy is yours to edit.');
       }
       onClose();
     } catch (err) {
@@ -94,7 +94,7 @@ export default function FileVideoDialog({
       const code = apiError instanceof ApiError ? apiError.code : '';
       if (code === 'forbidden' && mode === 'move') {
         setError(
-          'You cannot move this unit — it is not yours to take out of its folder. Copy it instead.',
+          'You cannot move this unit because it is not yours to take out of its folder. Copy it instead.',
         );
         setMode('copy');
       } else if (code === 'not_ready') {
@@ -176,7 +176,7 @@ export default function FileVideoDialog({
           </select>
           {options.length === 0 ? (
             <p className="mt-1.5 text-2xs text-faint">
-              Create a folder first — or ask its owner for the editor role.
+              Create a folder first, or ask its owner for the editor role.
             </p>
           ) : null}
         </div>

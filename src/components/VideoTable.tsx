@@ -5,7 +5,8 @@ import { videoStatusLabel } from '../lib/statusLabels';
 import EmptyState from './EmptyState';
 import Spinner from './Spinner';
 import StatusBadge, { PlatformBadge } from './StatusBadge';
-import { btnGhost, btnNeutral, tableCellCls, tableHeadCls } from './ui';
+import { iconActionCls, tableCellCls, tableHeadCls } from './ui';
+import { EyeIcon, FolderIcon, RefreshIcon, TrashIcon } from './icons';
 
 interface VideoTableProps {
   videos: Video[];
@@ -43,6 +44,61 @@ export default function VideoTable({
   canManage = false,
   canRetry = false,
 }: VideoTableProps) {
+  /* One row of icon-only actions, shared by the desktop table and the phone
+   * card list so the affordances stay identical across breakpoints. Every
+   * control carries aria-label + title; `tap-pad` inside iconActionCls lifts
+   * it to 44px on touch screens. */
+  const renderActions = (video: Video) => (
+    <div className="flex items-center justify-end gap-1">
+      <button
+        type="button"
+        onClick={() => onView?.(video)}
+        className={iconActionCls('neutral')}
+        disabled={cannotOpen(video) || busyId === video.id}
+        aria-label={cannotOpen(video) ? 'No access' : `View “${video.title ?? video.id}”`}
+        title={cannotOpen(video) ? 'No access' : 'Open details'}
+      >
+        <EyeIcon size={15} />
+      </button>
+      {canManage ? (
+        <button
+          type="button"
+          onClick={() => onFile?.(video)}
+          className={iconActionCls('neutral')}
+          disabled={busyId === video.id}
+          aria-label="Move or copy into a folder"
+          title="Move or copy into a folder"
+        >
+          <FolderIcon size={15} />
+        </button>
+      ) : null}
+      {canRetry ? (
+        <button
+          type="button"
+          onClick={() => onRetry?.(video)}
+          className={iconActionCls('neutral')}
+          disabled={busyId === video.id}
+          aria-label="Re-queue the download"
+          title="Re-queue the download"
+        >
+          <RefreshIcon size={15} />
+        </button>
+      ) : null}
+      {canManage ? (
+        <button
+          type="button"
+          onClick={() => onDelete?.(video)}
+          className={iconActionCls('bad')}
+          disabled={busyId === video.id}
+          aria-label="Delete this video"
+          title="Delete this video and its transcripts"
+        >
+          <TrashIcon size={15} />
+        </button>
+      ) : null}
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-3 px-6 py-16">
@@ -62,7 +118,10 @@ export default function VideoTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* Desktop: full table. Phones (<md): the card list below, so rows never
+          force a horizontal scroll. */}
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[52rem] border-collapse">
         <thead className="border-b border-line bg-raised/40">
           <tr>
@@ -128,62 +187,67 @@ export default function VideoTable({
                     <span className="font-mono text-2xs text-dim">{video.progress}%</span>
                   </div>
                 ) : (
-                  <span className="text-faint">—</span>
+                  <span className="text-faint">None</span>
                 )}
               </td>
               <td className={`${tableCellCls} whitespace-nowrap font-mono text-xs`}>{formatDuration(video.duration_seconds)}</td>
               <td className={`${tableCellCls} whitespace-nowrap font-mono text-xs`}>{formatBytes(video.file_size)}</td>
               <td className={`${tableCellCls} whitespace-nowrap text-xs`}>{formatRelative(video.created_at)}</td>
               <td className={`${tableCellCls} sticky right-0 border-l border-line bg-card text-right`}>
-                <div className="flex items-center justify-end gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onView?.(video)}
-                    className={`${btnGhost} px-1.5 py-1 text-xs`}
-                    disabled={cannotOpen(video) || busyId === video.id}
-                    title={cannotOpen(video) ? 'No access' : undefined}
-                  >
-                    View
-                  </button>
-                  {canManage ? (
-                    <button
-                      type="button"
-                      onClick={() => onFile?.(video)}
-                      className={`${btnNeutral} px-1.5 py-1 text-xs`}
-                      disabled={busyId === video.id}
-                      title="Move or copy this video into a folder"
-                    >
-                      Folder…
-                    </button>
-                  ) : null}
-                  {canRetry ? (
-                    <button
-                      type="button"
-                      onClick={() => onRetry?.(video)}
-                      className={`${btnNeutral} px-1.5 py-1 text-xs`}
-                      disabled={busyId === video.id}
-                      title="Re-enqueue the download job"
-                    >
-                      Retry
-                    </button>
-                  ) : null}
-                  {canManage ? (
-                    <button
-                      type="button"
-                      onClick={() => onDelete?.(video)}
-                      className={`${btnGhost} px-1.5 py-1 text-xs text-bad hover:bg-bad-soft`}
-                      disabled={busyId === video.id}
-                      title="Delete this video and its transcripts"
-                    >
-                      Delete
-                    </button>
-                  ) : null}
-                </div>
+                {renderActions(video)}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+
+      {/* Phone card list: title, key chips, and the same icon actions. */}
+      <ul className="divide-y divide-line-soft md:hidden">
+        {videos.map((video) => (
+          <li key={video.id} className="px-3 py-3">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                {cannotOpen(video) ? (
+                  <span className="block truncate font-medium text-dim" title={video.title ?? video.source_url}>
+                    {video.title ?? <span className="text-faint italic">Untitled video</span>}
+                  </span>
+                ) : (
+                  <Link
+                    to={`/videos/${video.id}`}
+                    className="tap-pad block truncate font-medium text-fg hover:text-accent"
+                    title={video.title ?? video.source_url}
+                  >
+                    {video.title ?? <span className="text-faint italic">Untitled video</span>}
+                  </Link>
+                )}
+                <span className="mt-0.5 block truncate font-mono text-2xs text-faint">
+                  {video.source_url}
+                </span>
+                {video.error ? (
+                  <span className="mt-1 block truncate text-2xs text-bad" title={video.error}>
+                    {video.error}
+                  </span>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <PlatformBadge platform={String(video.platform)} />
+                  <StatusBadge status={String(video.status)} label={videoStatusLabel(video.status)} />
+                  {video.status === 'downloading' || video.progress > 0 ? (
+                    <span className="chip font-mono">{video.progress}%</span>
+                  ) : null}
+                  {video.copied_from_id ? (
+                    <span className="chip border-accent/40 bg-accent/10 text-accent">copy</span>
+                  ) : null}
+                  <span className="font-mono text-2xs text-faint">
+                    {formatDuration(video.duration_seconds)} · {formatBytes(video.file_size)} · {formatRelative(video.created_at)}
+                  </span>
+                </div>
+              </div>
+              <div className="shrink-0 pt-0.5">{renderActions(video)}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

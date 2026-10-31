@@ -9,7 +9,7 @@ import { formatDateTime } from '../lib/format';
 import { toast } from '../store/toast';
 import Modal from './Modal';
 import { CopyIcon, KeyIcon } from './icons';
-import { btnNeutral, btnPrimary, inputCls, labelCls, selectCls } from './ui';
+import { btnNeutral, btnPrimary, iconBtnCls, inputCls, labelCls, selectCls } from './ui';
 
 interface PasscodeDialogProps {
   folder: Folder | null;
@@ -115,7 +115,7 @@ export default function PasscodeDialog({ folder, onClose }: PasscodeDialogProps)
         {created?.code ? (
           <div className="rounded-lg border border-ok/40 bg-ok-soft p-3">
             <p className="text-2xs font-semibold uppercase tracking-wider text-ok">
-              Passcode created — copy it now, it is shown only once
+              Passcode created. Copy it now because it is shown only once
             </p>
             <div className="mt-1.5 flex items-center gap-2">
               <code className="flex-1 rounded-md border border-ok/30 bg-card px-3 py-2 font-mono text-lg tracking-[0.2em] text-fg">
@@ -124,9 +124,11 @@ export default function PasscodeDialog({ folder, onClose }: PasscodeDialogProps)
               <button
                 type="button"
                 onClick={() => void copyText(created.code as string)}
-                className={btnNeutral}
+                aria-label="Copy passcode"
+                title="Copy passcode"
+                className={iconBtnCls}
               >
-                <CopyIcon size={14} /> Copy
+                <CopyIcon size={15} />
               </button>
             </div>
           </div>

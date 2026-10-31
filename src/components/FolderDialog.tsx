@@ -19,7 +19,7 @@ interface FolderDialogProps {
 function flatten(items: Folder[], depth = 0): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
   for (const item of items) {
-    out.push({ id: item.id, label: `${'— '.repeat(depth)}${item.name}` });
+    out.push({ id: item.id, label: `${'\u00A0\u00A0'.repeat(depth)}${item.name}` });
     out.push(...flatten(item.children ?? [], depth + 1));
   }
   return out;
@@ -91,7 +91,7 @@ export default function FolderDialog({
             id="folder-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Khmer street interviews — Phnom Penh"
+            placeholder="Khmer street interviews, Phnom Penh"
             className={inputCls}
             autoFocus
           />

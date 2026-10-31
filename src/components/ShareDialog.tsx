@@ -9,7 +9,7 @@ import { formatDateTime } from '../lib/format';
 import { toast } from '../store/toast';
 import Modal from './Modal';
 import { CopyIcon, LinkIcon, UsersIcon } from './icons';
-import { btnDanger, btnNeutral, btnPrimary, inputCls, labelCls, selectCls } from './ui';
+import { btnDanger, btnPrimary, iconBtnCls, inputCls, labelCls, selectCls } from './ui';
 
 interface ShareDialogProps {
   folder: Folder | null;
@@ -19,7 +19,7 @@ interface ShareDialogProps {
 async function copyText(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
-    toast.success('Copied to the clipboard.');
+    toast.success('Share link copied.');
   } catch {
     // Clipboard access can be blocked; show the value so it can be selected.
     window.prompt('Copy this link:', text);
@@ -306,9 +306,11 @@ export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
                 <button
                   type="button"
                   onClick={() => void copyText(createdLink.url as string)}
-                  className={btnNeutral}
+                  aria-label="Copy share link"
+                  title="Copy share link"
+                  className={iconBtnCls}
                 >
-                  <CopyIcon size={14} /> Copy
+                  <CopyIcon size={15} />
                 </button>
               </div>
             </div>
@@ -364,7 +366,7 @@ export default function ShareDialog({ folder, onClose }: ShareDialogProps) {
             A link is shown in full only when it is created. If you lose it, revoke it and create a new one.
           </p>
           <p className="text-2xs text-faint">
-            Tip: a private folder can also be opened with a passcode — use the key button on the folder.
+            Tip: a private folder can also be opened with a passcode. Use the key button on the folder.
           </p>
         </div>
       )}

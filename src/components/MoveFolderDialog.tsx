@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Folder } from '../api/types';
 import Modal from './Modal';
+import { MoveIcon } from './icons';
 import { btnNeutral, btnPrimary, labelCls, selectCls } from './ui';
 
 interface Option {
@@ -76,7 +77,7 @@ export default function MoveFolderDialog({
         const noRights = candidate.my_role !== 'editor';
         return {
           id: candidate.id,
-          label: `${'— '.repeat(depth)}${candidate.name}`,
+          label: `${'\u00A0\u00A0'.repeat(depth)}${candidate.name}`,
           disabled: isSelf || isInside || noRights,
           note: isSelf ? 'this folder' : isInside ? 'inside itself' : noRights ? 'no edit rights' : undefined,
         };
@@ -132,7 +133,11 @@ export default function MoveFolderDialog({
             disabled={busy || !folder || dest === current}
             onClick={() => folder && onMove(folder, dest || null)}
           >
-            {busy ? 'Moving…' : dest === current ? 'Already here' : 'Move folder'}
+            {busy ? 'Moving…' : dest === current ? 'Already here' : (
+              <>
+                <MoveIcon size={15} /> Move folder
+              </>
+            )}
           </button>
         </div>
       </div>

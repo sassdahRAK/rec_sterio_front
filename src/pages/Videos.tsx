@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, foldersApi, videosApi } from '../api/client';
+import { ApiError, foldersApi, retryGet, videosApi } from '../api/client';
 import type { Folder, Video, VideoListQuery } from '../api/types';
 import AddVideoDialog from '../components/AddVideoDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -10,10 +10,11 @@ import Pagination, { ALL_ROWS } from '../components/Pagination';
 import VideoTable from '../components/VideoTable';
 import { ADMIN_TIER, OPERATOR_ROLES, PLATFORMS, VIDEO_STATUSES } from '../api/types';
 import { videoStatusLabel } from '../lib/statusLabels';
+import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
-import { btnNeutral, btnPrimary, inputCls, labelCls, selectCls } from '../components/ui';
-import { SearchIcon } from '../components/icons';
+import { btnPrimary, iconBtnCls, inputCls, labelCls, selectCls } from '../components/ui';
+import { PlusIcon, RefreshIcon, SearchIcon } from '../components/icons';
 
 export default function Videos() {
   const navigate = useNavigate();
@@ -64,34 +65,52 @@ export default function Videos() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  // Returns a cleanup function so the effect can cancel it. A debounced search
-  // can overlap a newer one; without the guard, whichever resolves last wins and
-  // clearing the box leaves the stale empty result on screen.
-  const load = useCallback((): (() => void) => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    videosApi
-      .list(query)
-      .then((result) => {
-        if (cancelled) return;
-        setVideos(result.items);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err);
-        setVideos([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
+  // A debounced search can overlap a newer one, and a slow background poll can
+  // land after a manual refresh. Ordering is decided by `lastAppliedSeq`: any
+  // successful response newer than the last one applied is used — crucially, a
+  // duplicate StrictMode mount request whose twin already succeeded is not
+  // treated as "stale". A failure never overwrites applied rows; it only sets
+  // the error banner, which renders solely when there are no rows to keep.
+  // `silent` (the poll) skips the spinner and swallows errors. Non-silent
+  // first loads retry twice (1s/3s) before showing the banner.
+  const reqSeq = useRef(0);
+  const lastAppliedSeq = useRef(0);
+  const load = useCallback(
+    (silent = false): void => {
+      const seq = ++reqSeq.current;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      const run = () => videosApi.list(query);
+      (silent ? run() : retryGet(run))
+        .then((result) => {
+          if (seq < lastAppliedSeq.current) return;
+          lastAppliedSeq.current = seq;
+          setVideos(result.items);
+          setTotal(result.total);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          if (seq < lastAppliedSeq.current) return;
+          // Keep the visible rows; the banner only renders without data, so a
+          // blip over a loaded table is invisible.
+          if (!silent) setError(err);
+        })
+        .finally(() => {
+          if (seq === reqSeq.current && !silent) setLoading(false);
+        });
+    },
+    [query],
+  );
 
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Poll the library so a video the bot just finished downloading appears
+  // without a manual Refresh. Silently: filters, scroll and search stay put.
+  useAutoRefresh(load, { intervalMs: 15000 });
 
   const onRetry = async (video: Video): Promise<void> => {
     setBusyId(video.id);
@@ -104,7 +123,7 @@ export default function Videos() {
       if (apiError instanceof ApiError && apiError.code === 'job_in_progress') {
         // Double-clicking Retry used to queue a second download of the same
         // file; the API refuses now, so say why instead of showing a code.
-        toast.info('Already queued — a download for this video is queued or running.');
+        toast.info('Already queued. A download for this video is queued or running.');
       } else {
         toast.error(
           apiError instanceof ApiError ? apiError.code : 'unexpected_error',
@@ -140,11 +159,11 @@ export default function Videos() {
 
   const summary = useMemo(() => {
     if (loading) return 'Loading…';
-    return `${total} video${total === 1 ? '' : 's'} in the library`;
+    return `${total} video${total === 1 ? '' : 's'}`;
   }, [loading, total]);
 
   return (
-    <div className="mx-auto max-w-[96rem] space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="shrink-0">
           <h2 className="break-words font-display text-2xl font-bold tracking-tight text-fg">Video library</h2>
@@ -165,10 +184,17 @@ export default function Videos() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" onClick={() => void load()} className={`${btnNeutral} rounded-full`}>
-            Refresh
+          <button
+            type="button"
+            onClick={() => void load()}
+            className={iconBtnCls}
+            aria-label="Refresh"
+            title="Reload the library"
+          >
+            <RefreshIcon size={16} />
           </button>
           <button type="button" onClick={() => setAddOpen(true)} className={`${btnPrimary} rounded-full`}>
+            <PlusIcon size={14} />
             Add video
           </button>
         </div>
@@ -229,12 +255,14 @@ export default function Videos() {
           >
             <option value="-created_at">Newest first</option>
             <option value="created_at">Oldest first</option>
-            <option value="title">Title A–Z</option>
+            <option value="title">Title A to Z</option>
           </select>
         </div>
       </div>
 
-      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {error && videos.length === 0 ? (
+        <ErrorState error={error} onRetry={() => void load()} />
+      ) : null}
 
       <div className="card overflow-hidden">
         <VideoTable
@@ -273,7 +301,7 @@ export default function Videos() {
         onAdded={(video, mode) => {
           toast.success(
             mode === 'upload'
-              ? `Uploaded “${video.title ?? video.id}” — extracting audio now.`
+              ? `Uploaded “${video.title ?? video.id}”. Extracting audio now.`
               : `Queued “${video.title ?? video.id}” for download.`,
           );
           void load();

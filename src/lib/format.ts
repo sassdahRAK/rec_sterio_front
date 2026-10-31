@@ -1,7 +1,7 @@
 /** Small presentation helpers shared across the console. */
 
 export function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined || Number.isNaN(bytes)) return '—';
+  if (bytes === null || bytes === undefined || Number.isNaN(bytes)) return 'None';
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
@@ -10,7 +10,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 export function formatDuration(seconds: number | null | undefined): string {
-  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return '—';
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return 'None';
   const total = Math.round(seconds);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
@@ -20,9 +20,9 @@ export function formatDuration(seconds: number | null | undefined): string {
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return 'None';
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -33,9 +33,9 @@ export function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const then = Date.parse(iso);
-  if (Number.isNaN(then)) return '—';
+  if (Number.isNaN(then)) return 'None';
   const diff = Date.now() - then;
   const abs = Math.abs(diff);
   const minute = 60_000;
@@ -61,6 +61,6 @@ export function wordCount(text: string): number {
 }
 
 export function shortId(id: string | null | undefined): string {
-  if (!id) return '—';
+  if (!id) return 'None';
   return id.length > 8 ? id.slice(0, 8) : id;
 }

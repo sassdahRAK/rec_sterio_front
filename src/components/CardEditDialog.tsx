@@ -19,7 +19,7 @@ interface CardEditDialogProps {
 function flattenFolders(items: Folder[], depth = 0): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
   for (const folder of items) {
-    out.push({ id: folder.id, label: `${'— '.repeat(depth)}${folder.name}` });
+    out.push({ id: folder.id, label: `${'\u00A0\u00A0'.repeat(depth)}${folder.name}` });
     out.push(...flattenFolders(folder.children ?? [], depth + 1));
   }
   return out;
@@ -72,7 +72,7 @@ export default function CardEditDialog({ card, folders, onClose, onSaved }: Card
       if ((card.folder_id ?? '') !== folderId) {
         await foldersApi.placeVideo(card.video_id, folderId || null);
       }
-      toast.success('Card saved — a new transcript version was created.');
+      toast.success('Card saved. A new transcript version was created.');
       onSaved();
       onClose();
     } catch (err) {

@@ -189,7 +189,7 @@ export default function Login() {
           />
           <div className="leading-tight">
             <p className="font-display text-lg font-bold tracking-tight">RecSterio</p>
-            <p className="text-2xs uppercase tracking-[0.18em] text-faint">Khmer–English dataset</p>
+            <p className="text-2xs uppercase tracking-[0.18em] text-faint">Khmer and English dataset</p>
           </div>
         </header>
 
@@ -199,7 +199,7 @@ export default function Login() {
             The operations console for the dataset.
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-dim">
-            Every folder, share link, passcode and transcription job — managed from one place.
+            Manage every folder, share link, passcode and transcription job from one place.
             Recording ingestion runs around the clock; this is where you watch it and fix it.
           </p>
           <ul className="mt-6 space-y-2 text-sm text-dim">

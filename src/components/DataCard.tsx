@@ -117,7 +117,7 @@ function VideoPane({ card }: { card: DataCardModel }) {
             disabled={!ready || loading}
             aria-label={
               driveOffline
-                ? "Storage unavailable — the contributor's drive is disconnected"
+                ? "Storage unavailable: the contributor's drive is disconnected"
                 : ready
                   ? `Play ${card.title ?? 'video'}`
                   : 'Media is still processing'
@@ -218,6 +218,7 @@ function AudioPane({ card }: { card: DataCardModel }) {
           onClick={() => void toggle()}
           disabled={!card.audio_available || loading}
           aria-label={playing ? 'Pause audio' : 'Play audio'}
+          title={playing ? 'Pause audio' : 'Play audio'}
           className="tap-pad flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-card text-fg transition hover:border-accent/50 disabled:opacity-40"
         >
           {loading ? (
@@ -381,6 +382,7 @@ function TranscriptPane({
                   type="button"
                   onClick={speak}
                   aria-label={speaking ? 'Stop reading' : 'Read transcript aloud'}
+                  title={speaking ? 'Stop reading' : 'Read transcript aloud'}
                   className="icon-btn h-7 w-7"
                 >
                   <SpeakerIcon size={13} />
@@ -390,6 +392,7 @@ function TranscriptPane({
                     type="button"
                     onClick={() => onEdit?.(card)}
                     aria-label="Edit transcript"
+                    title="Edit transcript"
                     className="icon-btn h-7 w-7"
                   >
                     <PencilIcon size={13} />
@@ -451,7 +454,7 @@ export default function DataCard({
                 <span aria-hidden="true">·</span>
                 <span
                   className="chip border-accent/40 bg-accent/10 text-accent"
-                  title="A copy of another unit — the original is somewhere else"
+                  title="A copy of another unit. The original is somewhere else."
                 >
                   copy
                 </span>
@@ -468,7 +471,7 @@ export default function DataCard({
                   }`}
                   title={
                     card.storage_available === false
-                      ? "The contributor's drive is disconnected — reconnect it to play this unit"
+                      ? "The contributor's drive is disconnected, so reconnect it to play this unit"
                       : `Stored in the contributor's ${card.storage_backend === 'google' ? 'Google Drive' : 'OneDrive'}`
                   }
                 >
@@ -523,6 +526,7 @@ export default function DataCard({
               onClick={() => onEdit?.(card)}
               className="icon-btn"
               aria-label="Edit this card"
+              title="Edit this card"
             >
               <PencilIcon size={14} />
             </button>
@@ -533,6 +537,7 @@ export default function DataCard({
               onClick={() => onDelete?.(card)}
               className="icon-btn hover:border-bad/50 hover:bg-bad-soft hover:text-bad"
               aria-label="Delete this card"
+              title="Delete this card"
             >
               <TrashIcon size={14} />
             </button>

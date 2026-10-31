@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { jobsApi, statsApi } from '../api/client';
+import { jobsApi, retryGet, statsApi } from '../api/client';
 import type { Job, Stats } from '../api/types';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
@@ -8,8 +8,10 @@ import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import { sourceLabel, statusColor, toneForStatus } from '../components/StatusBadge';
 import { formatBytes, formatRelative, truncate } from '../lib/format';
+import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { jobKindLabel, jobStatusLabel, videoStatusLabel } from '../lib/statusLabels';
-import { btnNeutral, btnPrimary } from '../components/ui';
+import { btnNeutral, btnPrimary, iconBtnCls } from '../components/ui';
+import { RefreshIcon } from '../components/icons';
 
 const statusOrder = [
   'pending',
@@ -50,25 +52,55 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
-  const load = useCallback(async (): Promise<void> => {
-    setError(null);
-    try {
-      const [statsResult, jobsResult] = await Promise.all([
+  // True once a load has populated the page. A failure after that keeps the
+  // last-known numbers on screen instead of swapping the whole page for the
+  // error view over one blip — the banner renders only when there is no data.
+  // Ordering is decided by `lastAppliedSeq`: any successful response newer
+  // than the last one applied is used, so a StrictMode duplicate whose twin
+  // already succeeded is not treated as "stale", and a failure never
+  // overwrites an applied success. The first load retries twice (1s/3s).
+  const hasDataRef = useRef(false);
+  const reqSeq = useRef(0);
+  const lastAppliedSeq = useRef(0);
+
+  const load = useCallback((silent = false): void => {
+    const seq = ++reqSeq.current;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
+    const run = () =>
+      Promise.all([
         statsApi.get(),
         jobsApi.list({ status: 'failed', page_size: 5, sort: '-created_at' }),
       ]);
-      setStats(statsResult);
-      setFailures(jobsResult.items);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
+    (silent ? run() : retryGet(run))
+      .then(([statsResult, jobsResult]) => {
+        if (seq < lastAppliedSeq.current) return;
+        lastAppliedSeq.current = seq;
+        setStats(statsResult);
+        setFailures(jobsResult.items);
+        hasDataRef.current = true;
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (seq < lastAppliedSeq.current) return;
+        if (!hasDataRef.current) setError(err);
+      })
+      .finally(() => {
+        if (seq === reqSeq.current && !silent) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
-    void load();
+    load();
   }, [load]);
+
+  // The counters track the pipeline, so poll them: a video the bot just
+  // finished downloading shows up without a manual Refresh. The loader never
+  // sets `loading` itself (only the first paint and the Refresh button do),
+  // so a poll updates the numbers without flashing the full-page spinner.
+  useAutoRefresh(load, { intervalMs: 15000 });
 
   if (loading) {
     return (
@@ -128,12 +160,12 @@ export default function Overview() {
     stats.jobs_failed === 0;
 
   return (
-    <div className="mx-auto max-w-[96rem] space-y-5">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="min-w-0 max-w-full">
           <h2 className="break-words font-display text-2xl font-bold tracking-tight text-fg">Pipeline overview</h2>
-          <p className="mt-0.5 break-words text-sm text-dim">
-            Live counters for ingestion, transcription and the job queue.
+          <p className="mt-0.5 hidden break-words text-sm text-dim sm:block">
+            Ingestion, transcription and the job queue.
           </p>
         </div>
         <button
@@ -142,9 +174,11 @@ export default function Overview() {
             setLoading(true);
             void load();
           }}
-          className={`${btnNeutral} ml-auto rounded-full`}
+          className={`${iconBtnCls} ml-auto`}
+          aria-label="Refresh"
+          title="Refresh counters"
         >
-          Refresh
+          <RefreshIcon size={16} />
         </button>
       </div>
 
@@ -163,13 +197,13 @@ export default function Overview() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Videos" value={stats.videos_total} hint="total ingested" />
-        <StatCard label="Transcribed" value={stats.transcripts_total} hint="transcript versions produced" />
-        <StatCard label="Merged" value={stats.merges_total} hint="Gemini reconciliations" tone="info" />
+        <StatCard label="Videos" value={stats.videos_total} hint="ingested" />
+        <StatCard label="Transcribed" value={stats.transcripts_total} hint="versions" />
+        <StatCard label="Merged" value={stats.merges_total} hint="Gemini merges" tone="info" />
         <StatCard
-          label="Jobs waiting"
+          label="Waiting"
           value={stats.jobs_queued}
-          hint="queued for a worker"
+          hint="queued"
           tone={stats.jobs_queued > 0 ? 'warn' : 'default'}
         />
         <StatCard
@@ -178,7 +212,7 @@ export default function Overview() {
           hint="need attention"
           tone={stats.jobs_failed > 0 ? 'bad' : 'ok'}
         />
-        <StatCard label="Storage used" value={formatBytes(stats.total_media_bytes)} hint="on-disk footprint" />
+        <StatCard label="Storage" value={formatBytes(stats.total_media_bytes)} hint="on disk" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

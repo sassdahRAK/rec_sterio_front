@@ -186,12 +186,12 @@ export default function MergeDiff({
                     </td>
                     <td className="px-3 py-3">
                       <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-dim">
-                        {whisper || <span className="italic text-faint">— nothing —</span>}
+                        {whisper || <span className="italic text-faint">Nothing yet</span>}
                       </p>
                     </td>
                     <td className="px-3 py-3">
                       <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-dim">
-                        {gemini || <span className="italic text-faint">— nothing —</span>}
+                        {gemini || <span className="italic text-faint">Nothing yet</span>}
                       </p>
                     </td>
                     <td className="px-3 py-3">
@@ -201,7 +201,7 @@ export default function MergeDiff({
                         {style.label}
                       </span>
                       <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-fg">
-                        {merged || <span className="italic text-faint">— nothing —</span>}
+                        {merged || <span className="italic text-faint">Nothing yet</span>}
                       </p>
                       {segment.reason ? (
                         <p className="mt-1 text-2xs italic leading-relaxed text-faint">{segment.reason}</p>

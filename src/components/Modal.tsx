@@ -1,6 +1,7 @@
 /** A small dialog shell: backdrop, escape-to-close, focus trap-ish behaviour. */
 import { useEffect, useRef, type ReactNode } from 'react';
 import { CloseIcon } from './icons';
+import { iconBtnCls } from './ui';
 
 interface ModalProps {
   open: boolean;
@@ -74,7 +75,8 @@ export default function Modal({
             data-close
             onClick={() => !busy && onClose()}
             aria-label="Close"
-            className="icon-btn"
+            title="Close"
+            className={iconBtnCls}
           >
             <CloseIcon size={14} />
           </button>

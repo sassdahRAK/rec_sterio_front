@@ -5,9 +5,16 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ErrorState from '../components/ErrorState';
 import Spinner from '../components/Spinner';
 import {
+  CloseIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  LinkIcon,
+} from '../components/icons';
+import {
   btnDanger,
   btnNeutral,
   btnPrimary,
+  iconBtnCls,
   inputCls,
   labelCls,
 } from '../components/ui';
@@ -102,10 +109,10 @@ const providerLabel = (p: CloudBackend): string => (p === 'google' ? 'Google Dri
 function cloudErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === 'cloud_auth_rejected') {
-      return 'That authorization link was already used or has expired — start Connect again.';
+      return 'That authorization link was already used or has expired. Start Connect again.';
     }
     if (err.code === 'provider_not_configured') {
-      return "This storage provider isn't set up yet — ask your administrator to enable it.";
+      return "This storage provider isn't set up yet. Ask your administrator to enable it.";
     }
     const details = Array.isArray(err.details)
       ? (err.details as { field?: string; issue?: string }[])
@@ -114,12 +121,12 @@ function cloudErrorMessage(err: unknown): string {
       err.code === 'validation_failed' &&
       details.some((d) => d.field === 'redirect_uri' && d.issue === 'foreign_origin')
     ) {
-      return "That link doesn't match this site — paste the full URL from the address bar after you authorized.";
+      return "That link doesn't match this site. Paste the full URL from the address bar after you authorized.";
     }
     const issue = details[0]?.issue;
     return issue ? `${err.message} (${issue})` : err.message;
   }
-  return 'Could not reach the server — check your connection and try again.';
+  return 'Could not reach the server. Check your connection and try again.';
 }
 
 /**
@@ -397,6 +404,17 @@ export default function Settings() {
     }
   }
 
+  const copyCode = async (): Promise<void> => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link.code);
+      toast.success('Link code copied.');
+    } catch {
+      // Clipboard can be blocked; show the value so it can be selected.
+      window.prompt('Copy this code:', link.code);
+    }
+  };
+
   const onGenerate = async (): Promise<void> => {
     setGenerating(true);
     try {
@@ -463,7 +481,7 @@ export default function Settings() {
                 onClick={() => setUnlinkOpen(true)}
                 className={`${btnDanger} rounded-md`}
               >
-                Unlink
+                <CloseIcon size={15} /> Unlink
               </button>
             </div>
           ) : (
@@ -477,33 +495,47 @@ export default function Settings() {
                 <span className={labelCls}>One-time code</span>
                 {link ? (
                   <div className="space-y-3">
-                    <p className="break-all rounded-md border border-line bg-raised px-3 py-2 font-mono text-sm text-fg">
-                      {link.code}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 break-all rounded-md border border-line bg-raised px-3 py-2 font-mono text-sm text-fg">
+                        {link.code}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void copyCode()}
+                        aria-label="Copy link code"
+                        title="Copy link code"
+                        className={iconBtnCls}
+                      >
+                        <CopyIcon size={15} />
+                      </button>
+                      {link.deep_link ? (
+                        <a
+                          href={link.deep_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Open Telegram"
+                          title="Open Telegram"
+                          className={iconBtnCls}
+                        >
+                          <ExternalLinkIcon size={15} />
+                        </a>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-faint">
-                      Expires in 15 minutes{link.expires_at ? ` — ${formatDateTime(link.expires_at)}` : ''}. The
+                      Expires in 15 minutes{link.expires_at ? ` (${formatDateTime(link.expires_at)})` : ''}. The
                       code is one-time use.
                     </p>
-                    {link.deep_link ? (
-                      <a
-                        href={link.deep_link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`${btnPrimary} rounded-md`}
-                      >
-                        Open Telegram
-                      </a>
-                    ) : (
+                    {!link.deep_link ? (
                       <p className="text-xs text-dim">
                         In the bot, send{' '}
                         <span className="font-mono">/start {link.code.startsWith('link-') ? link.code : `link-${link.code}`}</span>{' '}
                         to finish the link, and ask the operator to set TELEGRAM_BOT_USERNAME for a one-tap
                         link.
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 ) : (
-                  <p className="text-xs text-faint">No code yet — generate one to start linking.</p>
+                  <p className="text-xs text-faint">No code yet. Generate one to start linking.</p>
                 )}
               </div>
 
@@ -524,9 +556,11 @@ export default function Settings() {
       {/* ---- Cloud Storage ---- */}
       <div>
         <h2 className="mb-1 font-display text-lg font-semibold text-fg">Cloud storage</h2>
-        <p className="mb-4 text-sm text-dim">
+        {/* The heading already says "Cloud storage" — the fuller description
+            only shows from sm up. */}
+        <p className="mb-4 hidden text-sm text-dim sm:block">
           Keep your contributed video bytes on your own cloud. Connect a drive here, then choose it
-          when uploading a clip — the file goes to your drive and the dataset catalogues it normally.
+          when uploading a clip. The file goes to your drive and the dataset catalogues it normally.
         </p>
         {driveProviders && (!driveProviders.google || !driveProviders.onedrive) ? (
           <div className="mb-4 rounded-md border border-line bg-raised px-3 py-2 text-xs text-dim">
@@ -546,12 +580,12 @@ export default function Settings() {
                 {
                   key: 'google' as CloudBackend,
                   label: 'Google Drive',
-                  hint: 'Store videos in your own Google Drive (drive.file scope — only files this app creates).',
+                  hint: 'Only files this app creates (drive.file scope).',
                 },
                 {
                   key: 'onedrive' as CloudBackend,
                   label: 'OneDrive',
-                  hint: 'Store videos in your own OneDrive via Microsoft Graph (the app\'s own folder — Files.ReadWrite.AppFolder scope).',
+                  hint: 'The app\'s own folder (Files.ReadWrite.AppFolder scope).',
                 },
               ] as const
             ).map((p) => {
@@ -573,8 +607,8 @@ export default function Settings() {
                       {!connected && offered === true && clientIdMissing ? (
                         <p className="mt-1 text-xs text-faint">
                           {p.key === 'google'
-                            ? 'Google Drive isn\'t set up yet — ask your administrator to finish enabling it.'
-                            : 'OneDrive isn\'t set up yet — ask your administrator to finish enabling it.'}
+                            ? 'Google Drive isn\'t set up yet. Ask your administrator to finish enabling it.'
+                            : 'OneDrive isn\'t set up yet. Ask your administrator to finish enabling it.'}
                         </p>
                       ) : null}
                     </div>
@@ -586,7 +620,11 @@ export default function Settings() {
                           onClick={() => setDisconnectTarget(p.key)}
                           className={`${btnDanger} rounded-md`}
                         >
-                          {driveBusy === p.key ? 'Working…' : 'Disconnect'}
+                          {driveBusy === p.key ? 'Working…' : (
+                            <>
+                              <CloseIcon size={15} /> Disconnect
+                            </>
+                          )}
                         </button>
                       ) : isPending ? (
                         <div className="flex gap-2">
@@ -628,7 +666,7 @@ export default function Settings() {
                         />
                       ) : clientIdMissing ? (
                         <button type="button" disabled className={`${btnNeutral} rounded-md`}>
-                          Connect
+                          <LinkIcon size={15} /> Connect
                         </button>
                       ) : driveBusy === p.key ? (
                         <button type="button" disabled className={`${btnPrimary} rounded-md`}>
@@ -640,7 +678,7 @@ export default function Settings() {
                           onClick={() => startConnect(p.key)}
                           className={`${btnPrimary} rounded-md`}
                         >
-                          Connect
+                          <LinkIcon size={15} /> Connect
                         </button>
                       )}
                     </div>
@@ -665,7 +703,7 @@ export default function Settings() {
                       ) : null}
                       {popupBlocked && pendingUrl ? (
                         <a href={pendingUrl} target="_blank" rel="noreferrer" className={`${btnPrimary} mt-2`}>
-                          Open the authorization page
+                          <ExternalLinkIcon size={15} /> Open the authorization page
                         </a>
                       ) : null}
                     </div>
@@ -763,11 +801,11 @@ function PasteCodeDialog({
         role="dialog"
         aria-modal="true"
         aria-label={`Paste the ${label} authorization link`}
-        className="card relative w-full max-w-md animate-fade-up p-5"
+        className="card relative max-h-[85vh] w-full max-w-md overflow-y-auto animate-fade-up p-5"
       >
         <h2 className="font-display text-base font-semibold text-fg">Connect {label}</h2>
         <label className={`${labelCls} mt-3`} htmlFor="cloud-paste">
-          Paste the URL you were sent back to — or just the code
+          Paste the URL you were sent back to, or just the code
         </label>
         <textarea
           id="cloud-paste"
@@ -778,7 +816,7 @@ function PasteCodeDialog({
         />
         <p className="mt-1.5 text-xs text-faint">
           After you authorize, the browser is sent back to{' '}
-          <span className="font-mono">{cloudRedirectUri()}?code=…</span> — copy the whole address-bar
+          <span className="font-mono">{cloudRedirectUri()}?code=…</span>. Copy the whole address-bar
           URL here.
         </p>
         {error ? (

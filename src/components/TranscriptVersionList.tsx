@@ -19,7 +19,7 @@ export default function TranscriptVersionList({ versions, currentId, onLoad }: T
     return (
       <EmptyState
         title="No versions yet"
-        description="Every transcript source — Whisper, Gemini, manual edits and merges — is kept as its own version."
+        description="Every transcript source (Whisper, Gemini, manual edits and merges) is kept as its own version."
       />
     );
   }
@@ -56,7 +56,7 @@ export default function TranscriptVersionList({ versions, currentId, onLoad }: T
                   type="button"
                   onClick={() => onLoad?.(version)}
                   className={`${btnGhost} px-2 py-1 text-xs`}
-                  title="Load this version into the editor — saving it would create a new version"
+                  title="Load this version into the editor. Saving it would create a new version."
                 >
                   Edit
                 </button>

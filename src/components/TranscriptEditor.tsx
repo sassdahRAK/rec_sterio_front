@@ -86,7 +86,7 @@ export default function TranscriptEditor({ transcript, nextVersion, saving, onSa
 
           <div className="ml-auto flex items-center gap-2">
             {readOnly ? (
-              <span className="text-2xs text-faint">Read-only — your role cannot edit transcripts.</span>
+              <span className="text-2xs text-faint">Read-only. Your role cannot edit transcripts.</span>
             ) : (
               <>
                 <button

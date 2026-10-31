@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, jobsApi, videosApi } from '../api/client';
+import { ApiError, jobsApi, retryGet, videosApi } from '../api/client';
 import type { Job, JobListQuery } from '../api/types';
 import { JOB_KINDS, JOB_STATUSES } from '../api/types';
 import ErrorState from '../components/ErrorState';
 import JobTable from '../components/JobTable';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
+import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { jobKindLabel, jobStatusLabel } from '../lib/statusLabels';
 import { toast } from '../store/toast';
+import { AlertTriangleIcon, RefreshIcon } from '../components/icons';
 import { btnNeutral, btnPrimary, labelCls, selectCls } from '../components/ui';
 
 const REFRESH_MS = 5000;
@@ -24,44 +26,54 @@ export default function Jobs() {
   const [videoTitles, setVideoTitles] = useState<Record<string, string>>({});
   const titleCache = useRef<Record<string, string>>({});
 
-  // Returns a cleanup function so the effect can cancel it: a filter change can
-  // overlap the previous request, and a 5 s auto-refresh can overlap a manual
-  // one. Without the guard the slower, older response wins.
+  // A filter change can overlap the previous request, and a 5 s auto-refresh
+  // can overlap a manual one. Ordering is decided by `lastAppliedSeq`: any
+  // successful response newer than the last one applied is used — crucially, a
+  // duplicate StrictMode mount request whose twin already succeeded is not
+  // treated as "stale". A failure never overwrites applied rows; it only sets
+  // the error banner, which renders solely when there are no rows to keep.
+  // `silent` (the poll) skips the spinner and swallows errors — same policy as
+  // Overview: the next successful poll clears the banner anyway. Non-silent
+  // loads retry twice (1s/3s) before the banner.
+  const reqSeq = useRef(0);
+  const lastAppliedSeq = useRef(0);
   const load = useCallback(
-    (silent = false): (() => void) => {
-      let cancelled = false;
-      if (!silent) setLoading(true);
-      jobsApi
-        .list(query)
+    (silent = false): void => {
+      const seq = ++reqSeq.current;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      const run = () => jobsApi.list(query);
+      (silent ? run() : retryGet(run))
         .then((result) => {
-          if (cancelled) return;
+          if (seq < lastAppliedSeq.current) return;
+          lastAppliedSeq.current = seq;
           setJobs(result.items);
           setTotal(result.total);
           setLastUpdated(new Date());
           setError(null);
         })
         .catch((err: unknown) => {
-          if (cancelled) return;
-          setError(err);
+          if (seq < lastAppliedSeq.current) return;
+          if (!silent) setError(err);
         })
         .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (seq === reqSeq.current && !silent) setLoading(false);
         });
-      return () => {
-        cancelled = true;
-      };
     },
     [query],
   );
 
-  useEffect(() => load(), [load]);
-
-  // Auto-refresh the queue so running jobs visibly advance.
   useEffect(() => {
-    if (!autoRefresh) return;
-    const timer = window.setInterval(() => load(true), REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [autoRefresh, load]);
+    load();
+  }, [load]);
+
+  // Auto-refresh the queue so running jobs visibly advance, and so a video the
+  // bot finished ingesting appears without a manual Refresh (the hook refetches
+  // on tab-visible / window-focus too). Pausing on a hidden tab avoids hammering
+  // the API from background tabs.
+  useAutoRefresh(load, { intervalMs: REFRESH_MS, enabled: autoRefresh });
 
   // Keep a title map so the queue is readable without opening every video.
   useEffect(() => {
@@ -122,7 +134,7 @@ export default function Jobs() {
   const pageSize = query.page_size ?? 20;
 
   return (
-    <div className="mx-auto max-w-[96rem] space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
         <div>
           <h2 className="break-words font-display text-2xl font-bold tracking-tight text-fg">Job queue</h2>
@@ -143,19 +155,23 @@ export default function Jobs() {
             Auto-refresh every 5s
           </label>
           <button type="button" onClick={() => void load()} className={`${btnNeutral} rounded-full`}>
-            {loading ? <Spinner className="h-3.5 w-3.5" /> : null}
+            {loading ? <Spinner className="h-3.5 w-3.5" /> : <RefreshIcon size={13} />}
             Refresh
           </button>
         </div>
       </div>
 
-      <div className="card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Phones: a compact 2-column filter wrap; the option text already names
+          each control, so the labels only restate it from sm+ up (aria-label
+          keeps the name on touch widths where the label is hidden). */}
+      <div className="card grid grid-cols-2 gap-2 p-2 sm:grid-cols-2 sm:gap-3 sm:p-3 lg:grid-cols-4">
         <div>
-          <label htmlFor="job-status" className={labelCls}>
+          <label htmlFor="job-status" className={`${labelCls} hidden sm:block`}>
             Status
           </label>
           <select
             id="job-status"
+            aria-label="Filter by status"
             value={statusValue}
             onChange={(e) => setQuery((prev) => ({ ...prev, status: e.target.value || undefined, page: 1 }))}
             className={`${selectCls} w-full`}
@@ -170,11 +186,12 @@ export default function Jobs() {
         </div>
 
         <div>
-          <label htmlFor="job-kind" className={labelCls}>
+          <label htmlFor="job-kind" className={`${labelCls} hidden sm:block`}>
             Kind
           </label>
           <select
             id="job-kind"
+            aria-label="Filter by kind"
             value={kindValue}
             onChange={(e) => setQuery((prev) => ({ ...prev, kind: e.target.value || undefined, page: 1 }))}
             className={`${selectCls} w-full`}
@@ -189,11 +206,12 @@ export default function Jobs() {
         </div>
 
         <div>
-          <label htmlFor="job-sort" className={labelCls}>
+          <label htmlFor="job-sort" className={`${labelCls} hidden sm:block`}>
             Sort
           </label>
           <select
             id="job-sort"
+            aria-label="Sort jobs"
             value={query.sort ?? '-created_at'}
             onChange={(e) => setQuery((prev) => ({ ...prev, sort: e.target.value, page: 1 }))}
             className={`${selectCls} w-full`}
@@ -206,15 +224,18 @@ export default function Jobs() {
         <div className="flex flex-wrap items-end gap-2">
           <button
             type="button"
-            className={btnPrimary}
+            className={`${btnPrimary} w-full sm:w-auto`}
             onClick={() => setQuery((prev) => ({ ...prev, status: 'failed', page: 1 }))}
           >
-            Show failures only
+            <AlertTriangleIcon size={14} />
+            Failures only
           </button>
         </div>
       </div>
 
-      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {error && jobs.length === 0 ? (
+        <ErrorState error={error} onRetry={() => void load()} />
+      ) : null}
 
       <div className="card overflow-hidden">
         <JobTable

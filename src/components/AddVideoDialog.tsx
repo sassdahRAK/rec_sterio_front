@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, videosApi } from '../api/client';
 import type { Video } from '../api/types';
 import Spinner from './Spinner';
-import { btnNeutral, btnPrimary, inputCls, labelCls } from './ui';
+import { btnNeutral, btnPrimary, iconBtnCls, inputCls, labelCls } from './ui';
+import { CloseIcon } from './icons';
 
 interface AddVideoDialogProps {
   open: boolean;
@@ -108,7 +109,7 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
           setError(err.message);
         }
       } else {
-        setError('The request failed unexpectedly.');
+        setError('Something went wrong. Try again.');
       }
     } finally {
       setBusy(false);
@@ -147,12 +148,11 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="tap-pad rounded p-1 text-faint hover:text-fg disabled:opacity-40"
+            className={iconBtnCls}
             aria-label="Close"
+            title="Close"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <CloseIcon size={16} />
           </button>
         </div>
 
@@ -183,7 +183,7 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
               />
               <p className="mt-1.5 text-2xs text-faint">
                 The server downloads it. TikTok and YouTube often refuse server-side
-                downloads — if this fails, use “Upload a file” instead.
+                downloads. If this fails, use “Upload a file” instead.
               </p>
             </div>
           ) : (
@@ -206,7 +206,7 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
                 </p>
               ) : (
                 <p className="mt-1.5 text-2xs text-faint">
-                  mp4, mov, webm, mkv, mp3, m4a, wav, flac — up to {MAX_UPLOAD_MB} MB.
+                  mp4, mov, webm, mkv, mp3, m4a, wav, flac, up to {MAX_UPLOAD_MB} MB.
                 </p>
               )}
             </div>
@@ -265,7 +265,7 @@ export default function AddVideoDialog({ open, onClose, onAdded }: AddVideoDialo
           </button>
           <button type="button" className={btnPrimary} onClick={() => void submit()} disabled={busy}>
             {busy ? <Spinner className="mr-1.5 h-3.5 w-3.5" /> : null}
-            {busy ? (mode === 'upload' ? 'Uploading…' : 'Queueing…') : 'Add video'}
+            {busy ? (mode === 'upload' ? 'Uploading…' : 'Adding…') : 'Add video'}
           </button>
         </div>
       </div>

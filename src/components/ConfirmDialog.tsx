@@ -42,7 +42,7 @@ export default function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="card relative w-full max-w-md animate-fade-up p-5"
+        className="card relative max-h-[85vh] w-full max-w-md overflow-y-auto animate-fade-up p-5"
       >
         <h2 className="font-display text-base font-semibold text-fg">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-dim">{message}</p>
