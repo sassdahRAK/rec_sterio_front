@@ -19,6 +19,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
+  LockIcon,
   RefreshIcon,
   SearchIcon,
   UserPlusIcon,
@@ -40,6 +41,9 @@ import { useAuthStore } from '../store/auth';
 import { toast } from '../store/toast';
 
 const PAGE_SIZES = [10, 20, 50, 100, ALL_ROWS];
+
+/** The root row is server-locked (403 root_account_locked) — shown, not edited. */
+const ROOT_LOCK_HINT = 'Root account: cannot be edited';
 
 export default function Users() {
   const email = useAuthStore((s) => s.email);
@@ -158,25 +162,38 @@ export default function Users() {
   };
 
   // Shared by the table and the phone card list so the two never drift.
-  const roleSelect = (user: AdminUser) => (
-    <select
-      value={user.role}
-      onChange={(e) => void changeRole(user, e.target.value as AdminUser['role'])}
-      aria-label={`Role for ${user.email}`}
-      disabled={busyId === user.id || isSelf(user)}
-      title={isSelf(user) ? 'You cannot change your own role' : undefined}
-      className={`${selectCls} py-1 text-xs`}
-    >
-      {CONSOLE_ROLES.map((role) => (
-        <option key={role} value={role}>
-          {role}
-        </option>
-      ))}
-    </select>
-  );
+  // The root row shows a lock chip instead of the select: the API answers
+  // 403 root_account_locked for any privilege edit, so offering the select
+  // would only invite the refusal toast.
+  const roleSelect = (user: AdminUser) =>
+    user.is_root ? (
+      <span
+        className="chip inline-flex items-center gap-1 border-line bg-raised text-dim"
+        title={ROOT_LOCK_HINT}
+      >
+        <LockIcon size={12} />
+        {user.role}
+        <span className="sr-only">{ROOT_LOCK_HINT}</span>
+      </span>
+    ) : (
+      <select
+        value={user.role}
+        onChange={(e) => void changeRole(user, e.target.value as AdminUser['role'])}
+        aria-label={`Role for ${user.email}`}
+        disabled={busyId === user.id || isSelf(user)}
+        title={isSelf(user) ? 'You cannot change your own role' : undefined}
+        className={`${selectCls} py-1 text-xs`}
+      >
+        {CONSOLE_ROLES.map((role) => (
+          <option key={role} value={role}>
+            {role}
+          </option>
+        ))}
+      </select>
+    );
 
   const statusAction = (user: AdminUser) =>
-    user.is_active ? (
+    user.is_root ? null : user.is_active ? (
       <button
         type="button"
         onClick={() => setTarget(user)}

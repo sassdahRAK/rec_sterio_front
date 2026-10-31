@@ -455,6 +455,8 @@ export interface AdminUser {
   name: string | null;
   role: Role;
   is_active: boolean;
+  /** True only on the deployment's root account — role/state are locked there. */
+  is_root?: boolean;
   created_at: string;
   telegram_user_id?: number | null;
 }
