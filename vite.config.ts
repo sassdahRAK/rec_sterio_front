@@ -23,6 +23,11 @@ type LoopbackResponse = {
   end(): void;
 };
 
+// `process.env.VERCEL` is read at config time in Node; the ambient declaration
+// keeps that working without pulling in @types/node, which this app does not
+// install (same reason the middleware types above are spelled out locally).
+declare const process: { env: Record<string, string | undefined> };
+
 function redirectLoopbackToLocalhost(): Plugin {
   const toLocalhost = (req: LoopbackRequest, res: LoopbackResponse, next: () => void) => {
     const host = (req.headers.host ?? '').toLowerCase();
@@ -61,9 +66,10 @@ function redirectLoopbackToLocalhost(): Plugin {
 export default defineConfig(({ mode }) => ({
   plugins: [redirectLoopbackToLocalhost(), react()],
   // In production Caddy serves the public portal at `/` and this console at
-  // `/console/`, so the built asset URLs must carry that prefix. Dev stays at
-  // `/` so the familiar local URLs keep working.
-  base: mode === 'production' ? '/console/' : '/',
+  // `/console/`, so the built asset URLs must carry that prefix. Vercel hosts
+  // this app at the site root instead, so there the prefix must be `/` or
+  // every asset 404s and the deployed page renders blank. Dev stays at `/`.
+  base: process.env.VERCEL ? '/' : mode === 'production' ? '/console/' : '/',
   server: {
     port: 5173,
     strictPort: false,
