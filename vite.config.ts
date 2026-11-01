@@ -71,6 +71,9 @@ export default defineConfig(({ mode }) => ({
     // `localhost` to 127.0.0.1 otherwise gets ECONNREFUSED from a healthy
     // server. It is also what lets the bot's "Go to admin" button open this
     // console from a phone — the link it sends is this machine's LAN IP.
+    // Dev only: accept any Host header so a Cloudflare quick tunnel
+    // (*.trycloudflare.com) can reach this server. Never used by a build.
+    allowedHosts: true,
     host: true,
     // Same-origin API calls in dev, matching the deployed layout (Caddy serves
     // the built dashboard and /api from one origin). No CORS preflight, and the
@@ -81,6 +84,8 @@ export default defineConfig(({ mode }) => ({
   },
   preview: {
     port: 4173,
+    // Same dev-only tunnel allowance as `server` above.
+    allowedHosts: true,
     proxy: {
       '/api': { target: 'http://127.0.0.1:8000', changeOrigin: false },
     },
