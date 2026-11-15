@@ -453,9 +453,18 @@ export const videosApi = {
       throw new ApiError('not_found', 'Media is not available in demo data.', 404);
     }
     const token = readToken();
-    const response = await fetch(`${API_BASE}/videos/${id}/media`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/videos/${id}/media`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    } catch {
+      throw new ApiError(
+        'network_error',
+        'Could not reach the RecSterio API. Check that the backend is running.',
+        0,
+      );
+    }
     if (!response.ok) {
       const text = await response.text();
       let payload: unknown = null;
@@ -469,7 +478,16 @@ export const videosApi = {
       }
       throw toApiError(response.status, payload);
     }
-    return response.blob();
+    // A body read can fail mid-stream; map it like the fetch failure above.
+    try {
+      return await response.blob();
+    } catch {
+      throw new ApiError(
+        'network_error',
+        'Could not reach the RecSterio API. Check that the backend is running.',
+        0,
+      );
+    }
   },
 };
 
@@ -572,7 +590,16 @@ async function requestBlob(path: string): Promise<Blob> {
     }
     throw toApiError(response.status, payload);
   }
-  return response.blob();
+  // A body read can fail mid-stream; map it like the fetch failure above.
+  try {
+    return await response.blob();
+  } catch {
+    throw new ApiError(
+      'network_error',
+      'Could not reach the RecSterio API. Check that the backend is running.',
+      0,
+    );
+  }
 }
 
 /** Save a blob under a filename (used for ZIP exports and audio downloads). */
