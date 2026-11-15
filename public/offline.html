@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RecSterio console is offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #ffffff;
+        color: #1f2430;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.55;
+      }
+      main {
+        max-width: 34rem;
+        width: 100%;
+      }
+      .rule {
+        width: 48px;
+        height: 4px;
+        border-radius: 999px;
+        background: #3b6fe0;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.55rem;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 0 0 24px;
+        color: #4a5265;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 22px;
+        background: #3b6fe0;
+        color: #ffffff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #315fc4;
+      }
+      button:focus-visible {
+        outline: 3px solid #9db7f2;
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="rule" aria-hidden="true"></div>
+      <h1>You are offline</h1>
+      <p>
+        The RecSterio console needs a connection to manage folders, share links,
+        passcodes and the transcription queue. Reconnect and reload to continue.
+      </p>
+      <button type="button" onclick="location.reload()">Reload</button>
+    </main>
+  </body>
+</html>

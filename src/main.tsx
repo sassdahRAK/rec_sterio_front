@@ -30,3 +30,15 @@ createRoot(container).render(
     </BrowserRouter>
   </StrictMode>,
 );
+
+// Register the service worker in production builds only. It is resolved from
+// BASE_URL so the same code installs under `/` and under `/console/`.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+      scope: import.meta.env.BASE_URL,
+    }).catch(() => {
+      // An install failure must never break the console.
+    });
+  });
+}

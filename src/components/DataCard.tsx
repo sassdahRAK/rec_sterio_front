@@ -81,6 +81,13 @@ function useMediaBlob(kind: 'video' | 'audio', videoId: string) {
 function VideoPane({ card }: { card: DataCardModel }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const { url, loading, load } = useMediaBlob('video', card.video_id);
+  // An expired or unreachable thumbnail must not stay a broken image: once the
+  // load fails the pane falls back to the same gradient placeholder used when
+  // the card has no frame at all.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [card.thumbnail_url]);
   // A cloud-stored unit whose drive is disconnected cannot be fetched: the
   // play button would only ever produce a 404, so it is not offered.
   const driveOffline = card.storage_backend != null && card.storage_available === false;
@@ -124,10 +131,11 @@ function VideoPane({ card }: { card: DataCardModel }) {
             }
             className="group relative flex h-full w-full items-center justify-center"
           >
-            {card.thumbnail_url ? (
+            {card.thumbnail_url && !thumbFailed ? (
               <img
                 src={card.thumbnail_url}
                 alt=""
+                onError={() => setThumbFailed(true)}
                 className="absolute inset-0 h-full w-full object-cover opacity-80"
               />
             ) : (
