@@ -42,6 +42,10 @@ export default {
         display: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Khmer has no glyphs in Inter or JetBrains Mono, so transcript text
+        // needs a Khmer-capable face first. Display and sans are unchanged:
+        // the console keeps its instrument-panel identity.
+        khmer: ['"Noto Sans Khmer"', '"Noto Sans"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }],

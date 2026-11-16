@@ -370,7 +370,7 @@ function TranscriptPane({
             <div className="min-w-0 flex-1">
               <p
                 ref={textRef}
-                className={`whitespace-pre-wrap text-sm leading-relaxed text-fg${expanded ? '' : ' line-clamp-5'}`}
+                className={`whitespace-pre-wrap text-sm leading-relaxed text-fg font-khmer${expanded ? '' : ' line-clamp-5'}`}
                 style={{ overflowWrap: 'anywhere' }}
                 title={expanded ? undefined : text}
               >
